@@ -1,4 +1,4 @@
-# Poste-Italiane-Emulation-C
+# Poste-Italiane-Simulation-C
 ### Descrizione del progetto: versione minima (voto max 24 su 30)
 Si intende simulare il funzionamento di un ufficio postale. A tal fine sono presenti i seguenti processi e risorse.
  - Processo direttore Ufficio Posta, che gestisce la simulazione, e mantiene le statistiche su richieste e servizi 
