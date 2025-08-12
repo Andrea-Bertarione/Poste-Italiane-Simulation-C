@@ -23,13 +23,11 @@ A multi-process simulation of an Italian post office built in C using POSIX IPC 
 ## Inter process comunication
 > I decided to use Message queues to simplify the systems as pipes would have required a huge work on the direttore.c to redirect messages between sibling processes
 
-flowchart TD
-U[User] -->|Ticket request| T[Ticket Generator]
-T -->|Ticket response| U
-U -->|Present ticket| O[Operator]
-O -->|Service completion| U
-O -->|Update stats| S[Shared Memory]
-D[Director] -->|Reads stats| S
+User ──(ticket request)────────▶ Ticket Generator
+User ◀─(ticket number)────────── Ticket Generator
+
+User ──(present ticket)────────▶ Operator
+User ◀─(service done)─────────── Operator
 
 ## Quick Start
 ```bash
