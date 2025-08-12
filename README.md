@@ -12,12 +12,24 @@ A multi-process simulation of an Italian post office built in C using POSIX IPC 
 &nbsp;&nbsp;&nbsp;&nbsp;└── poste.h               # Shared structures and prototypes <br>
 
 ## Shared Memory
-> Each of these memory portions have a semaphore used to make sure operations are atomic
+> Each of these memory portion have a semaphore used to make sure operations are atomic
 
 | endpoint | description |
 | -------- | ----------- |
 | /poste_stats | Memory portion that holds all the statistics for the current simulation, saving the total, by day and by service. |
 | /poste_stations | Memory portion that shows the currently working operators, refers to [Risorse sportello](#risorse-sportello). |
+| /poste_tickets | Memory portion that holds tickets that are being worked on |
+
+## Inter process comunication
+> I decided to use Message queues to simplify the systems as pipes would have required a huge work on the direttore.c to redirect messages between sibling processes
+
+flowchart TD
+U[User] -->|Ticket request| T[Ticket Generator]
+T -->|Ticket response| U
+U -->|Present ticket| O[Operator]
+O -->|Service completion| U
+O -->|Update stats| S[Shared Memory]
+D[Director] -->|Reads stats| S
 
 ## Quick Start
 ```bash
