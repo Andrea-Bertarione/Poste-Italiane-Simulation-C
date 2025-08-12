@@ -1,6 +1,9 @@
 
 #define _GNU_SOURCE
-#define _POSIX_C_SOURCE 199309L
+//#define _POSIX_C_SOURCE 199309L
+
+#ifndef POSTE_H
+#define POSTE_H
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -53,8 +56,9 @@ struct S_poste_stats {
 };
 
 struct S_worker_seat {
-    pid_t worker_process;
-    SEAT_STATUS status;
+    pid_t operator_process;
+    SEAT_STATUS operator_status;
+    SEAT_STATUS user_status;
     char* service; //Name of the serive, inside the service table
 };
 
@@ -71,3 +75,5 @@ struct S_poste_stations {
     
 #define SHM_STATIONS_NAME "/poste_stations"
 #define SHM_STATIONS_SIZE   sizeof(struct S_poste_stations)
+
+#endif

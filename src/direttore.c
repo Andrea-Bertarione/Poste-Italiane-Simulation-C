@@ -1,5 +1,6 @@
+#define _POSIX_C_SOURCE 199309L
+
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -7,7 +8,8 @@
 #include <sys/stat.h> 
 #include <fcntl.h>
 
-#include "../include/poste.h"
+#include <direttore.h>
+#include <shared_mem.h>
 
 // TYPES
 typedef struct S_poste_stats poste_stats;
@@ -30,20 +32,26 @@ static const char* PROCESS_TYPES[] = {
     "NOF USERS"
 };
 
+static const char *PROCESS_PATHS[] = {
+    "./erogatore_ticket",
+    "./operatore",
+    "./utente"
+};
+
 // Helper function for time calculations
 int day_to_minutes(int days) {
     return days * 24 * 60;
 }
 
 // Helper function that startup processes
-pid_t start_process(const char* type) {
+pid_t start_process(enum PROCESS_INDEXES type) {
     pid_t pid = fork();
     if (pid < 0) { perror("fork"); exit(1); }
     if (pid == 0) {
         // child
-        printf("%s running\n", type);
+        printf("%s running\n", PROCESS_TYPES[type]);
 
-
+        execl(PROCESS_PATHS[type], PROCESS_PATHS[type], (char *)NULL);
 
         _exit(0);
     }
@@ -62,25 +70,29 @@ void start_new_day(int day, poste_stats* shared_stats) {
 }
 
 //Main implementation
+#ifndef UNIT_TEST
 int main() {
     pid_t children[1 + NUM_OPERATORS + NUM_USERS];
     int idx = 0;
+
+    int open_shm[] = {};
+    int open_shm_index = 0;
 
     // Create pointer to shared_stats and shared_stations, later mapped to shared memory
     poste_stats *shared_stats;
     poste_stations *shared_stations;
 
     // Start ticket erogatore
-    children[idx++] = start_process(PROCESS_TYPES[TICKET]);
+    children[idx++] = start_process(TICKET);
 
     // Start operator processes
     for (int i = 0; i < NUM_OPERATORS; i++) {
-        children[idx++] = start_process(PROCESS_TYPES[OPERATORE]);
+        children[idx++] = start_process(OPERATORE);
     }
 
     // Start user processes
     for (int i = 0; i < NUM_USERS; i++) {
-        children[idx++] = start_process(PROCESS_TYPES[UTENTE]);
+        children[idx++] = start_process(UTENTE);
     }
 
     // Struct that holds the correlation between irl time and a minute inside the simulation
@@ -93,23 +105,8 @@ int main() {
     int days_elapsed = 0; //Keeping a copy and not holding this information in shared memory for fast access and concurrency
 
     // Open shared memory endpoint(calling it endpoint because it looks similar to a REST API's endpoint) for stats and worker stations
-    int shm_stats = shm_open(SHM_STATS_NAME, O_CREAT|O_RDWR, 0666);
-    ftruncate(shm_stats, SHM_STATS_SIZE);
-    shared_stats = mmap(NULL, SHM_STATS_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, shm_stats, 0);
-
-    if (shared_stats == MAP_FAILED) {
-        perror("mmap");
-        exit(EXIT_FAILURE);
-    }
-
-    int shm_stations = shm_open(SHM_STATIONS_NAME, O_CREAT|O_RDWR, 0666);
-    ftruncate(shm_stations, SHM_STATIONS_SIZE);
-    shared_stations = mmap(NULL, SHM_STATIONS_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, shm_stations, 0);
-
-    if (shared_stations == MAP_FAILED) {
-        perror("mmap");
-        exit(EXIT_FAILURE);
-    }
+    shared_stats = (poste_stats*) init_shared_memory(SHM_STATS_NAME, SHM_STATS_SIZE, open_shm, &open_shm_index);
+    shared_stations = (poste_stations*) init_shared_memory(SHM_STATIONS_NAME, SHM_STATIONS_SIZE, open_shm, &open_shm_index);
 
     // Initialize every value of the SHM to 0 so everything is in a known state
     memset(shared_stats, 0, SHM_STATS_SIZE);
@@ -161,15 +158,9 @@ int main() {
     sem_destroy(&shared_stats->stats_lock);
     sem_destroy(&shared_stations->stations_lock);
 
-    // Close and unlink the shared memory
-    munmap(shared_stats, SHM_STATS_SIZE);
-    close(shm_stats);
-
-    munmap(shared_stations, SHM_STATIONS_SIZE);
-    close(shm_stations);
-    
-    shm_unlink(SHM_STATS_NAME);
-    shm_unlink(SHM_STATIONS_NAME);
+    cleanup_shared_memory(SHM_STATS_NAME, SHM_STATS_SIZE, open_shm[0], shared_stats);
+    cleanup_shared_memory(SHM_STATIONS_NAME, SHM_STATIONS_SIZE, open_shm[1], shared_stations);
 
     return EXIT_SUCCESS;
 }
+#endif  // UNIT_TEST
