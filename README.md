@@ -9,10 +9,11 @@ A multi-process simulation of an Italian post office built in C using POSIX IPC 
 │   ├── operatore.c           # Operator logic <br>
 │   └── utente.c              # User behavior <br>
 └── include/ <br>
-    └── poste.h               # Shared structures and prototypes <br>
+&nbsp;&nbsp;&nbsp;&nbsp;└── poste.h               # Shared structures and prototypes <br>
 
 ## Shared Memory
 > Each of these memory portions have a semaphore used to make sure operations are atomic
+
 | endpoint | description |
 | -------- | ----------- |
 | /poste_stats | Memory portion that holds all the statistics for the current simulation, saving the total, by day and by service. |
