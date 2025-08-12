@@ -1,4 +1,33 @@
-# Poste-Italiane-Simulation-C
+# Poste Italiane Emulation - C Implementation
+
+A multi-process simulation of an Italian post office built in C using POSIX IPC mechanisms.
+
+## Structure
+├── src/ <br>
+│   ├── direttore.c           # Main director process <br>
+│   ├── erogatore_ticket.c    # Ticket dispenser <br>
+│   ├── operatore.c           # Operator logic <br>
+│   └── utente.c              # User behavior <br>
+└── include/ <br>
+    └── poste.h               # Shared structures and prototypes <br>
+
+## Shared Memory
+> Each of these memory portions have a semaphore used to make sure operations are atomic
+| endpoint | description |
+| -------- | ----------- |
+| /poste_stats | Memory portion that holds all the statistics for the current simulation, saving the total, by day and by service. |
+| /poste_stations | Memory portion that shows the currently working operators, refers to [Risorse sportello](#risorse-sportello). |
+
+## Quick Start
+```bash
+make all
+./bin/direttore <optional configs>
+```
+
+<details>
+<summary>📜 Original Project Requirements (click to expand)</summary>
+
+# Poste-Italiane-Emulation-C
 ### Descrizione del progetto: versione minima (voto max 24 su 30)
 Si intende simulare il funzionamento di un ufficio postale. A tal fine sono presenti i seguenti processi e risorse.
  - Processo direttore Ufficio Posta, che gestisce la simulazione, e mantiene le statistiche su richieste e servizi 
@@ -140,3 +169,5 @@ Per i motivi introdotti a lezione, ricordarsi di definire la macro GNU SOURCE o 
 ```bash
 -D GNU SOURCE
 ```
+
+</details>
