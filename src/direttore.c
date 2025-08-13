@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 199309L
+#define _GNU_SOURCE
 
 #include <stdio.h>
 #include <string.h>
@@ -33,9 +34,9 @@ static const char* PROCESS_TYPES[] = {
 };
 
 static const char *PROCESS_PATHS[] = {
-    "./erogatore_ticket",
-    "./operatore",
-    "./utente"
+    "bin/erogatore_ticket",
+    "bin/operatore",
+    "bin/utente"
 };
 
 // Helper function for time calculations
@@ -49,11 +50,13 @@ pid_t start_process(enum PROCESS_INDEXES type) {
     if (pid < 0) { perror("fork"); exit(1); }
     if (pid == 0) {
         // child
-        printf("%s running\n", PROCESS_TYPES[type]);
+        printf("\033[31m[DIRETTORE]:\033[0m %s running\n", PROCESS_TYPES[type]);
+
+        
 
         execl(PROCESS_PATHS[type], PROCESS_PATHS[type], (char *)NULL);
-
-        _exit(0);
+        perror("execl failed");
+        _exit(1);
     }
 
     return pid;
@@ -61,12 +64,16 @@ pid_t start_process(enum PROCESS_INDEXES type) {
 
 // Helper function that operates on a new day
 void start_new_day(int day, poste_stats* shared_stats) {
-    printf("New day beggining, current day = %d \n", day);
+    printf("\033[31m[DIRETTORE]:\033[0m New day beggining, current day = %d \n\n\n", day);
 
     // Update SHM day count
     sem_wait(&shared_stats->stats_lock);
     shared_stats->current_day = day;
     sem_post(&shared_stats->stats_lock);
+
+    for (int i = 0; i < NUM_USERS; i++) {
+        sem_post(&shared_stats->day_update_event);
+    }
 }
 
 //Main implementation
@@ -81,19 +88,6 @@ int main() {
     // Create pointer to shared_stats and shared_stations, later mapped to shared memory
     poste_stats *shared_stats;
     poste_stations *shared_stations;
-
-    // Start ticket erogatore
-    children[idx++] = start_process(TICKET);
-
-    // Start operator processes
-    for (int i = 0; i < NUM_OPERATORS; i++) {
-        children[idx++] = start_process(OPERATORE);
-    }
-
-    // Start user processes
-    for (int i = 0; i < NUM_USERS; i++) {
-        children[idx++] = start_process(UTENTE);
-    }
 
     // Struct that holds the correlation between irl time and a minute inside the simulation
     struct timespec t1, t2;
@@ -118,14 +112,40 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
+    int sem_day_result = sem_init(&shared_stats->day_update_event, 1, 0);
+    if (sem_day_result < 0) {
+        perror("sem_init");
+        exit(EXIT_FAILURE);
+    }
+
     int sem_stations_result = sem_init(&shared_stations->stations_lock, 1, 1);
     if (sem_stations_result < 0) {
         perror("sem_init");
         exit(EXIT_FAILURE);
     }
 
+    // Start ticket erogatore
+    children[idx++] = start_process(TICKET);
+
+    // Make sure the ticket generator is running before generating children
+    sleep(1);
+
+    // Start operator processes
+    for (int i = 0; i < NUM_OPERATORS; i++) {
+        children[idx++] = start_process(OPERATORE);
+    }
+
+    // Start user processes
+    for (int i = 0; i < NUM_USERS; i++) {
+        children[idx++] = start_process(UTENTE);
+    }
+
+    // Wait for children startup
+    printf("\033[31m[DIRETTORE]:\033[0m Waiting for children to properly startup\n");
+    sleep(3);
+
     // Start simulation loop
-    while (minutes_elapsed <= day_to_minutes(SIM_DURATION)) {
+    while (days_elapsed < SIM_DURATION) {
         int response = nanosleep(&t1, &t2);
         if (response != 0) {
             printf("Sleep was interrupted.\n");
@@ -138,21 +158,36 @@ int main() {
 
             // Handle new day
             start_new_day(days_elapsed, shared_stats);
+            minutes_elapsed = 0;
         }
 
         minutes_elapsed++;
+        sem_wait(&shared_stats->stats_lock);
+        shared_stats->current_minute = minutes_elapsed;
+        sem_post(&shared_stats->stats_lock);
     }
 
-    // Kill all children
+    sleep(2);
+
+    // Immediately terminate all children (they will be killed even if blocked in sem_wait)
+    for (int i = 0; i < idx; i++) {
+        kill(children[i], SIGKILL);
+    }
+
+    // Reap each child
     for (int i = 0; i < idx; i++) {
         int status;
         if (waitpid(children[i], &status, 0) < 0) {
             perror("waitpid");
         } else if (WIFEXITED(status)) {
-            printf("Child %d exited with status %d\n",
-                   children[i], WEXITSTATUS(status));
+            printf("\033[31m[DIRETTORE]:\033[0m Child %d exited with status %d\n",
+                children[i], WEXITSTATUS(status));
+        } else if (WIFSIGNALED(status)) {
+            printf("\033[31m[DIRETTORE]:\033[0m Child %d killed by signal %d\n",
+                children[i], WTERMSIG(status));
         }
     }
+
 
     // Delete the semaphore before closing the SHM
     sem_destroy(&shared_stats->stats_lock);

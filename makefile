@@ -18,9 +18,15 @@ SRCS := $(SRC)/direttore.c \
         $(SYS)/msg_queue.c \
         $(SYS)/shared_mem.c
 
-# Object files
-OBJS := $(patsubst $(SRC)/%.c,$(OBJ)/%.o,$(filter $(SRC)/%.c,$(SRCS))) \
-        $(patsubst $(SYS)/%.c,$(OBJ)/%.o,$(filter $(SYS)/%.c,$(SRCS)))
+# Object files for shared/system modules only
+SYSTEM_OBJS := $(OBJ)/systems/msg_queue.o $(OBJ)/systems/shared_mem.o
+
+# All object files (for dependency tracking)
+ALL_OBJS := $(OBJ)/direttore.o \
+            $(OBJ)/erogatore_ticket.o \
+            $(OBJ)/operatore.o \
+            $(OBJ)/utente.o \
+            $(SYSTEM_OBJS)
 
 # Executables
 EXES := $(BIN)/direttore \
@@ -30,26 +36,31 @@ EXES := $(BIN)/direttore \
 
 .PHONY: all clean unit test
 
-all: $(BIN) $(OBJ) $(EXES)
+all: $(EXES)
+
+# Each executable links with its own object file plus shared system objects
+$(BIN)/direttore: $(OBJ)/direttore.o $(SYSTEM_OBJS) | $(BIN)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+$(BIN)/erogatore_ticket: $(OBJ)/erogatore_ticket.o $(SYSTEM_OBJS) | $(BIN)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+$(BIN)/operatore: $(OBJ)/operatore.o $(SYSTEM_OBJS) | $(BIN)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+$(BIN)/utente: $(OBJ)/utente.o $(SYSTEM_OBJS) | $(BIN)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Compile sources to objects with order-only directory dependencies
+$(OBJ)/%.o: $(SRC)/%.c | $(OBJ)
+	$(CC) $(CFLAGS) -I$(INCLUDE) -c $< -o $@
+
+$(OBJ)/systems/%.o: $(SYS)/%.c | $(OBJ)/systems
+	$(CC) $(CFLAGS) -I$(INCLUDE) -c $< -o $@
 
 # Create directories
-$(BIN) $(OBJ):
+$(OBJ) $(OBJ)/systems $(BIN):
 	@mkdir -p $@
-
-# Link each executable
-$(BIN)/%: $(OBJ)/%.o $(filter-out $(OBJ)/direttore.o,$(OBJ))  
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
-
-# Special link for direttore (it only depends on its own object and sys code)
-$(BIN)/direttore: $(OBJ)/direttore.o $(OBJ)/msg_queue.o $(OBJ)/shared_mem.o
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
-
-# Compile sources to objects
-$(OBJ)/%.o: $(SRC)/%.c
-	$(CC) $(CFLAGS) -I$(INCLUDE) -c $< -o $@
-
-$(OBJ)/%.o: $(SYS)/%.c
-	$(CC) $(CFLAGS) -I$(INCLUDE) -c $< -o $@
 
 # Unit tests for direttore.c
 unit: all $(OBJ)/test_direttore.o

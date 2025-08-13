@@ -4,11 +4,11 @@
 #include <sys/types.h>
 #include <msg_queue.h>
 
-#define KEY_TICKET_MSG "/msg/ticket"
+#define KEY_TICKET_MSG "./msg/ticket"
 #define PROJ_ID  'P'
 
 enum MESSAGE_TYPES {
-    MSG_TYPE_TICKET_REQUEST,
+    MSG_TYPE_TICKET_REQUEST = 1,
     MSG_TYPE_TICKET_RESPONSE,
     MSG_TYPE_SERVICE_REQUEST,
     MSG_TYPE_SERVICE_DONE

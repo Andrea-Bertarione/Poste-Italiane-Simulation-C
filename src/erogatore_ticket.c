@@ -51,11 +51,15 @@ int main() {
     ticket_queue *shared_ticket = (ticket_queue*) init_shared_memory(SHM_TICKET_NAME, SHM_TICKETS_SIZE, open_shm, &open_shm_index);
     memset(shared_ticket, 0, SHM_TICKETS_SIZE);
 
-    sem_init(&shared_ticket->ticket_lock, 1, 1);
+    int sem_ticket_result = sem_init(&shared_ticket->ticket_lock, 1, 1);
+    if (sem_ticket_result < 0) {
+        perror("sem_init");
+        exit(EXIT_FAILURE);
+    }
 
     srand(time(NULL));
 
-    printf("Ticket generator running on queue %d\n", qid);
+    printf("\033[32m[EROGATORE TICKET]:\033[0m Ticket generator running on queue %d\n", qid);
     while(running) {
         ticket_request req;
         ssize_t n = mq_receive(qid,
@@ -69,12 +73,12 @@ int main() {
             break;
         }
 
-        printf("Received request from PID %d for service %s\n",
+        printf("\033[32m[EROGATORE TICKET]:\033[0m Received request from PID %d for service %s\n",
                req.sender_pid, services[req.service_id]);
 
         //Create new ticket lock from start
         // THIS IS IMPLEMENTATION IS BAREBONES
-        // if it needed to scale i would use a Hash map instead
+        // if it needed to scale i would use a Hash map instead of a randomly indexed list
         sem_wait(&shared_ticket->ticket_lock);
 
         ticket new_ticket;

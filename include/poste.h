@@ -1,5 +1,4 @@
 
-#define _GNU_SOURCE
 //#define _POSIX_C_SOURCE 199309L
 
 #ifndef POSTE_H
@@ -9,11 +8,19 @@
 #include <sys/types.h>
 #include <semaphore.h>
 
-#define SIM_DURATION 10 // days
+#define SIM_DURATION 3 // days
 #define N_NANO_SECS 10000000L // 0.1s
-#define NUM_OPERATORS     3 // default without configs
-#define NUM_USERS         5 // default without configs
-#define NUM_WORKER_SEATS 3 // default without configs
+#define NUM_OPERATORS     2 // default without configs
+#define NUM_USERS         1 // default without configs
+#define NUM_WORKER_SEATS 2 // default without configs
+
+#define WORKER_SHIFT_OPEN 7
+#define WORKER_SHIFT_CLOSE 19
+
+#define P_SERV_MIN 20
+#define P_SERV_MAX 100
+
+#define MAX_N_REQUESTS 10
 
 #define NUM_SERVICE_TYPES 6  // From Table 1 in specs
 
@@ -50,9 +57,11 @@ struct S_poste_stats {
     int total_active_operators;
     int total_simulation_pauses;
     int current_day;
+    int current_minute;
     
     // Synchronization
     sem_t stats_lock;  // Semaphore index for atomic updates
+    sem_t day_update_event; // Semaphore that tells processes when a new day starts
 };
 
 struct S_worker_seat {
