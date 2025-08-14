@@ -4,8 +4,9 @@ FROM alpine:latest
 RUN apk add --no-cache build-base git bash curl
 
 # 2) Download and install ttyd v1.7.7
-RUN curl -sL https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd_1.7.7_linux_amd64.tar.gz \
-    | tar xz -C /usr/local/bin --strip-components=1 \
+RUN curl -sL \
+  https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 \
+  -o /usr/local/bin/ttyd \
  && chmod +x /usr/local/bin/ttyd
 
 # 3) Copy and build your C project
