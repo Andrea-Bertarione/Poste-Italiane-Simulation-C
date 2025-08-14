@@ -10,6 +10,7 @@ RUN curl -sL \
  && chmod +x /usr/local/bin/ttyd
 
 # 3) Copy and build your C project
+COPY ./
 RUN make all
 
 # 4) Expose port and launch ttyd
