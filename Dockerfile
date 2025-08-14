@@ -10,11 +10,9 @@ RUN curl -sL \
  && chmod +x /usr/local/bin/ttyd
 
 # 3) Copy and build your C project
-COPY . /src
-WORKDIR /src
 RUN make all
 
 # 4) Expose port and launch ttyd
 EXPOSE 8080
-CMD ["ttyd", "--writable", "-p", "8080", "bash", "-c", "make all && ./bin/direttore"]
+CMD ["ttyd", "--writable", "-p", "8080", "bash", "-c", "./bin/direttore"]
 
