@@ -17,4 +17,4 @@ RUN make clean && make all
 EXPOSE 8080
 
 # Launch a writable shell via ttyd
-CMD ["ttyd", "--writable", "-p", "8080", "bash", "-lc", "cd /app && bash"]
+CMD ["ttyd", "--writable", "-p", "8080", "bash"]
