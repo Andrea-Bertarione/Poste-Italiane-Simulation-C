@@ -19,4 +19,4 @@ RUN make clean && make all
 EXPOSE 8080
 
 # 6. Start a bare bash shell in /app with ttyd
-CMD ["ttyd", "--writable", "-p", "8080", "bash", "-lc", "cd /app && ./bin/direttore"]
+CMD ["ttyd", "--writable", "-p", "8080", "bash", "-lc", "cd /app && bash"]
