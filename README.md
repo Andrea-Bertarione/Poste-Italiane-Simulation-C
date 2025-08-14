@@ -35,6 +35,8 @@ make all
 ./bin/direttore <optional configs>
 ```
 
+[![Open in Gitpod](https://img.shields.io/badge/Open%20in-Gitpod-5E60CE?logo=gitpod)](https://gitpod.io/#https://github.com/Andrea-Bertarione/Poste-Italiane-Simulation-C)
+
 <details>
 <summary>📜 Original Project Requirements (click to expand)</summary>
 
