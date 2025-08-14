@@ -16,4 +16,5 @@ RUN make all
 
 # 4) Expose port and launch ttyd
 EXPOSE 8080
-CMD ["ttyd", "-p", "8080", "bash", "-lc", "cd src && ./bin/direttore"]
+CMD ["ttyd", "--writable", "-p", "8080", "bash", "-c", "cd src && ./bin/direttore || bash"]
+
