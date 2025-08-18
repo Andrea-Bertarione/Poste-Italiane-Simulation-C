@@ -1,6 +1,3 @@
-
-//#define _POSIX_C_SOURCE 199309L
-
 #ifndef POSTE_H
 #define POSTE_H
 
@@ -10,13 +7,13 @@
 
 #define SIM_DURATION 3 // days
 #define N_NANO_SECS 10000000L // 0.1s
-#define NUM_OPERATORS     2 // default without configs
-#define NUM_USERS         1 // default without configs
-#define NUM_WORKER_SEATS 2 // default without configs
+#define NUM_OPERATORS     4 // default without configs
+#define NUM_USERS         3 // default without configs
+#define NUM_WORKER_SEATS 3 // default without configs
 
-#define WORKER_SHIFT_OPEN 7
-#define WORKER_SHIFT_CLOSE 19
-
+#define WORKER_SHIFT_OPEN 8 // 8:00 AM
+#define WORKER_SHIFT_CLOSE 20 // 8:00 PM
+#define PA
 #define P_SERV_MIN 20
 #define P_SERV_MAX 100
 
@@ -61,6 +58,7 @@ struct S_poste_stats {
     
     // Synchronization
     sem_t stats_lock;  // Semaphore index for atomic updates
+    sem_t open_poste_event; // Semaphore that tells processes when the poste opens
     sem_t day_update_event; // Semaphore that tells processes when a new day starts
 };
 
@@ -68,7 +66,7 @@ struct S_worker_seat {
     pid_t operator_process;
     SEAT_STATUS operator_status;
     SEAT_STATUS user_status;
-    char* service; //Name of the serive, inside the service table
+    int service_id; //Id of the service, inside the service table
 };
 
 struct S_poste_stations {
@@ -77,6 +75,8 @@ struct S_poste_stations {
 
     // Synchronization
     sem_t stations_lock;  // Semaphore index for atomic updates
+    sem_t stations_event; // Semaphore that tells workers when a station opens up
+    sem_t stations_freed_event; // Semaphore that tells users when a station is freed
 };
 
 #define SHM_STATS_NAME   "/poste_stats"

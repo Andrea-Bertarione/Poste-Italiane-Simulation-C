@@ -27,16 +27,6 @@ const char* services[] = {
     "Acquisto orologi e braccialetti"
 };
 
-//List of durations(Minutes) refenced to services
-const int services_duration[] = {
-    10,
-    8,
-    6,
-    8,
-    20,
-    20
-};
-
 #ifndef UNIT_TEST
 int main() {
     int open_shm[] = {};

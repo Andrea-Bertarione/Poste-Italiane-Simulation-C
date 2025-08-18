@@ -12,21 +12,27 @@
 #include <direttore.h>
 #include <shared_mem.h>
 
-// TYPES
+#define DIRETTORE_PREFIX "\033[31m[DIRETTORE]:\033[0m"
+
+#define PRINT_STAT(label, value) \
+    printf(DIRETTORE_PREFIX " " label ": %d\n", (value))
+
+#define PRINT_FLOAT_STAT(label, numerator, denominator) \
+    printf(DIRETTORE_PREFIX " " label ": %.2f\n", \
+           (denominator) > 0 ? (float)(numerator) / (denominator) : 0.0f)
+
 typedef struct S_poste_stats poste_stats;
 typedef struct S_daily_stats daily_stats;
 typedef struct S_service_stats service_stats;
 typedef struct S_poste_stations poste_stations;
 typedef struct S_worker_seat worker_seat;
 
-// ENUMS
 enum PROCESS_INDEXES {
     TICKET,
     OPERATORE,
     UTENTE
 };
 
-// CONSTANTS
 static const char* PROCESS_TYPES[] = {
     "erogatore ticket",
     "NOF WORKERS",
@@ -39,44 +45,96 @@ static const char *PROCESS_PATHS[] = {
     "bin/utente"
 };
 
-// Helper function for time calculations
+//List of available services
+const char* services[] = {
+    "Invio e ritiro pacchi",
+    "Invio e ritiro lettere e raccomandate",
+    "Prelievi e versamenti Bancoposta",
+    "Pagamento bollettini postali",
+    "Acquisto prodotti finanziari",
+    "Acquisto orologi e braccialetti"
+};
+
+
 int day_to_minutes(int days) {
     return days * 24 * 60;
 }
 
-// Helper function that startup processes
 pid_t start_process(enum PROCESS_INDEXES type) {
     pid_t pid = fork();
     if (pid < 0) { perror("fork"); exit(1); }
     if (pid == 0) {
-        // child
-        printf("\033[31m[DIRETTORE]:\033[0m %s running\n", PROCESS_TYPES[type]);
-
-        
-
+        printf(DIRETTORE_PREFIX " %s running\n", PROCESS_TYPES[type]);
         execl(PROCESS_PATHS[type], PROCESS_PATHS[type], (char *)NULL);
         perror("execl failed");
         _exit(1);
     }
-
     return pid;
 }
 
-// Helper function that operates on a new day
-void start_new_day(int day, poste_stats* shared_stats) {
-    printf("\033[31m[DIRETTORE]:\033[0m New day beggining, current day = %d \n\n\n", day);
+void print_day_stats(daily_stats today) {
+    printf("\n" DIRETTORE_PREFIX " === Daily Statistics ===\n");
+    
+    PRINT_STAT("Active operators", today.active_operators);
+    PRINT_STAT("Total pauses", today.total_pauses);
+    PRINT_STAT("Served users", today.global.served_users);
+    PRINT_STAT("Failed services", today.global.failed_services);
+    
+    PRINT_FLOAT_STAT("Average general wait time", 
+                     today.global.total_wait_time, 
+                     today.global.total_requests);
+    
+    PRINT_FLOAT_STAT("Average service wait time", 
+                     today.global.total_service_time, 
+                     today.global.total_requests);
 
-    // Update SHM day count
+    printf("\n" DIRETTORE_PREFIX " === Service Statistics ===\n");
+    for (int i = 0; i < NUM_SERVICE_TYPES; i++) {
+        printf("\n" DIRETTORE_PREFIX " %s:\n", services[i]);
+        
+        printf("  Served users: %d\n", today.services[i].served_users);
+        printf("  Failed services: %d\n", today.services[i].failed_services);
+        
+        if (today.services[i].total_requests > 0) {
+            printf("  Avg general wait time: %.2f\n", 
+                   (float)today.services[i].total_wait_time / today.services[i].total_requests);
+            printf("  Avg service wait time: %.2f\n", 
+                   (float)today.services[i].total_service_time / today.services[i].total_requests);
+        } else {
+            printf("  Avg general wait time: N/A\n");
+            printf("  Avg service wait time: N/A\n");
+        }
+    }
+    
+    printf("\n" DIRETTORE_PREFIX " ========================\n");
+}
+
+void start_new_day(int day, poste_stats* shared_stats, poste_stations* shared_stations) {
+    printf(DIRETTORE_PREFIX " New day beginning, current day = %d\n\n", day);
+    printf(DIRETTORE_PREFIX " Showing stats for the day:\n");
+    
     sem_wait(&shared_stats->stats_lock);
     shared_stats->current_day = day;
+    shared_stats->today = (daily_stats) {};
     sem_post(&shared_stats->stats_lock);
 
-    for (int i = 0; i < NUM_USERS; i++) {
+    print_day_stats(shared_stats->today);
+
+    // Setup worker seats for the new day
+    sem_wait(&shared_stations->stations_lock);
+    for (int i = 0; i < NUM_WORKER_SEATS; i++) {
+        shared_stations->NOF_WORKER_SEATS[i].operator_process = 0;
+        shared_stations->NOF_WORKER_SEATS[i].operator_status = FREE;
+        shared_stations->NOF_WORKER_SEATS[i].user_status = FREE;
+        shared_stations->NOF_WORKER_SEATS[i].service_id = rand() % NUM_SERVICE_TYPES; // Randomly assign a service for the day
+    }
+    sem_post(&shared_stations->stations_lock);
+
+    for (int i = 0; i < NUM_USERS + NUM_OPERATORS; i++) {
         sem_post(&shared_stats->day_update_event);
     }
 }
 
-//Main implementation
 #ifndef UNIT_TEST
 int main() {
     pid_t children[1 + NUM_OPERATORS + NUM_USERS];
@@ -85,29 +143,29 @@ int main() {
     int open_shm[] = {};
     int open_shm_index = 0;
 
-    // Create pointer to shared_stats and shared_stations, later mapped to shared memory
     poste_stats *shared_stats;
     poste_stations *shared_stations;
 
-    // Struct that holds the correlation between irl time and a minute inside the simulation
     struct timespec t1, t2;
     t1.tv_sec = 0;
     t1.tv_nsec = N_NANO_SECS;
 
-    // Current time elapsed since start (In simulation minutes where 0.1 seconds = 1 minute inside the simulation)
     int minutes_elapsed = 0;
-    int days_elapsed = 0; //Keeping a copy and not holding this information in shared memory for fast access and concurrency
+    int days_elapsed = 0;
 
-    // Open shared memory endpoint(calling it endpoint because it looks similar to a REST API's endpoint) for stats and worker stations
     shared_stats = (poste_stats*) init_shared_memory(SHM_STATS_NAME, SHM_STATS_SIZE, open_shm, &open_shm_index);
     shared_stations = (poste_stations*) init_shared_memory(SHM_STATIONS_NAME, SHM_STATIONS_SIZE, open_shm, &open_shm_index);
 
-    // Initialize every value of the SHM to 0 so everything is in a known state
     memset(shared_stats, 0, SHM_STATS_SIZE);
 
-    // Initialize semaphores for atomic operations
     int sem_stats_result = sem_init(&shared_stats->stats_lock, 1, 1);
     if (sem_stats_result < 0) {
+        perror("sem_init");
+        exit(EXIT_FAILURE);
+    }
+
+    int sem_open_poste_result = sem_init(&shared_stats->open_poste_event, 1, 0);
+    if (sem_open_poste_result < 0) {
         perror("sem_init");
         exit(EXIT_FAILURE);
     }
@@ -124,27 +182,33 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    // Start ticket erogatore
+    int sem_stations_event_result = sem_init(&shared_stations->stations_event, 1, 0);
+    if (sem_stations_event_result < 0) {
+        perror("sem_init");
+        exit(EXIT_FAILURE);
+    }
+
+    int sem_stations_freed_result = sem_init(&shared_stations->stations_freed_event, 1, 0);
+    if (sem_stations_freed_result < 0) {
+        perror("sem_init");
+        exit(EXIT_FAILURE);
+    }
+
     children[idx++] = start_process(TICKET);
 
-    // Make sure the ticket generator is running before generating children
     sleep(1);
 
-    // Start operator processes
     for (int i = 0; i < NUM_OPERATORS; i++) {
         children[idx++] = start_process(OPERATORE);
     }
 
-    // Start user processes
     for (int i = 0; i < NUM_USERS; i++) {
         children[idx++] = start_process(UTENTE);
     }
 
-    // Wait for children startup
-    printf("\033[31m[DIRETTORE]:\033[0m Waiting for children to properly startup\n");
+    printf(DIRETTORE_PREFIX " Waiting for children to properly startup\n");
     sleep(3);
 
-    // Start simulation loop
     while (days_elapsed < SIM_DURATION) {
         int response = nanosleep(&t1, &t2);
         if (response != 0) {
@@ -152,12 +216,16 @@ int main() {
             exit(EXIT_FAILURE);
         }
 
-        // Check if a new days just started
+        if (minutes_elapsed % WORKER_SHIFT_OPEN == 0) {
+            for (int i = 0; i < NUM_OPERATORS + NUM_USERS; i++) {
+                sem_post(&shared_stats->open_poste_event);
+            }
+            printf(DIRETTORE_PREFIX " Poste opened for the day\n");
+        }
+
         if (minutes_elapsed % 1440 == 0) {
             days_elapsed++;
-
-            // Handle new day
-            start_new_day(days_elapsed, shared_stats);
+            start_new_day(days_elapsed, shared_stats, shared_stations);
             minutes_elapsed = 0;
         }
 
@@ -169,27 +237,23 @@ int main() {
 
     sleep(2);
 
-    // Immediately terminate all children (they will be killed even if blocked in sem_wait)
     for (int i = 0; i < idx; i++) {
         kill(children[i], SIGKILL);
     }
 
-    // Reap each child
     for (int i = 0; i < idx; i++) {
         int status;
         if (waitpid(children[i], &status, 0) < 0) {
             perror("waitpid");
         } else if (WIFEXITED(status)) {
-            printf("\033[31m[DIRETTORE]:\033[0m Child %d exited with status %d\n",
+            printf(DIRETTORE_PREFIX " Child %d exited with status %d\n",
                 children[i], WEXITSTATUS(status));
         } else if (WIFSIGNALED(status)) {
-            printf("\033[31m[DIRETTORE]:\033[0m Child %d killed by signal %d\n",
+            printf(DIRETTORE_PREFIX " Child %d killed by signal %d\n",
                 children[i], WTERMSIG(status));
         }
     }
 
-
-    // Delete the semaphore before closing the SHM
     sem_destroy(&shared_stats->stats_lock);
     sem_destroy(&shared_stations->stations_lock);
 
@@ -198,4 +262,4 @@ int main() {
 
     return EXIT_SUCCESS;
 }
-#endif  // UNIT_TEST
+#endif

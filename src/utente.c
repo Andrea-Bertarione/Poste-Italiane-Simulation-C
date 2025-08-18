@@ -9,13 +9,28 @@
 #include <comunications.h>
 #include <poste.h>
 #include <shared_mem.h>
-#include <utente.h>
 
 // TYPES
 typedef struct S_ticket_request    ticket_request;
 typedef struct S_ticket_response   ticket_response;
+typedef struct S_service_request   service_request;
+typedef struct S_service_done      service_done;
 typedef struct S_poste_stats       poste_stats;
 typedef struct S_daily_stats       daily_stats;
+typedef struct S_poste_stations    poste_stations;
+typedef struct S_worker_seat       worker_seat;
+
+#define PREFIX "\033[32m[UTENTE]:\033[0m"
+
+//List of available services
+const char* services[] = {
+    "Invio e ritiro pacchi",
+    "Invio e ritiro lettere e raccomandate",
+    "Prelievi e versamenti Bancoposta",
+    "Pagamento bollettini postali",
+    "Acquisto prodotti finanziari",
+    "Acquisto orologi e braccialetti"
+};
 
 // Send a ticket request returns 0 on failure and 1 on success
 int send_ticket_request(mq_id qid, int service) {
@@ -23,82 +38,140 @@ int send_ticket_request(mq_id qid, int service) {
     req.sender_pid = getpid();
     req.service_id = service;
 
-    printf("UTENTE[%d]: Sending ticket request (service_id=%d)\n",
-        getpid(), req.service_id);
+    printf(PREFIX " Sending ticket request (service_id=%d)\n", req.service_id);
     fflush(stdout);
 
     if (mq_send(qid,
                 MSG_TYPE_TICKET_REQUEST,
                 &req,
                 sizeof(req)) < 0) {
-        fprintf(stderr, "UTENTE[%d] ERROR mq_send request: %s\n",
-                getpid(), strerror(errno));
+        fprintf(stderr, PREFIX " ERROR mq_send request: %s\n",
+                strerror(errno));
         fflush(stderr);
-
         return 0;
     }
 
     return 1;
 }
 
-// wait for ticket response returns -1 on error, 0 on failure and 1 on success
+// wait for ticket response
 ticket_response await_ticket_response(mq_id qid) {
     ticket_response res;
     ssize_t n = mq_receive(qid,
-                               getpid(),
-                               &res,
-                               sizeof(res),
-                               0);
+                           getpid(),
+                           &res,
+                           sizeof(res),
+                           0);
     if (n < 0) {
         if (errno == EINTR) {
-            printf("UTENTE[%d]: mq_receive interrupted, retrying\n", getpid());
+            printf(PREFIX " mq_receive interrupted, retrying\n");
             fflush(stdout);
             res.ticket_number = -1;
         }
-        fprintf(stderr, "UTENTE[%d] ERROR mq_receive: %s\n",
-                getpid(), strerror(errno));
+        fprintf(stderr, PREFIX " ERROR mq_receive: %s\n",
+                strerror(errno));
         fflush(stderr);
         res.ticket_number = -1;
     }
 
-    printf("UTENTE[%d]: Received response, ticket_number=%d\n",
-           getpid(), res.ticket_number);
+    printf(PREFIX " Received response, ticket_number=%d\n",
+           res.ticket_number);
     fflush(stdout);
 
     return res;
 }
 
-// Function that decides if to go to the poste or no
-bool poste_decision() {
-    int p_serv = rand() % P_SERV_MAX;
+// send service request returns 0 on failure and 1 on success
+int send_service_request(mq_id qid, int ticket_number, pid_t operator_pid) {
+    service_request req;
+    req.sender_pid = getpid();
+    req.ticket_number = ticket_number;
 
-    if (p_serv >= P_SERV_MIN) {
-        return true;
+    printf(PREFIX " Sending service request for ticket %d\n", ticket_number);
+    fflush(stdout);
+
+    if (mq_send(qid,
+                (MSG_TYPE_SERVICE_REQUEST MSG_TYPE_TICKET_REQUEST_MULT) + operator_pid, // mtype is message type * 10000 + operator PID
+                &req,
+                sizeof(req)) < 0) {
+        fprintf(stderr, PREFIX " ERROR mq_send service request: %s\n",
+                strerror(errno));
+        fflush(stderr);
+        return 0;
     }
 
-    return false;
+    return 1;
 }
 
-// generate the list of services to be done for the day, returns the amount of services to be done and edit the list
+// wait for service done
+service_done await_service_done(mq_id qid) {
+    service_done res;
+    ssize_t n = mq_receive(qid,
+                           getpid(),
+                           &res,
+                           sizeof(res),
+                           0);
+    if (n < 0) {
+        if (errno == EINTR) {
+            printf(PREFIX " mq_receive interrupted, retrying\n");
+            fflush(stdout);
+            res.ticket_number = -1;
+        }
+        fprintf(stderr, PREFIX " ERROR mq_receive: %s\n",
+                strerror(errno));
+        fflush(stderr);
+        res.ticket_number = -1;
+    }
+
+    printf(PREFIX " Received response, ticket_number=%d\n",
+           res.ticket_number);
+    fflush(stdout);
+
+    return res;
+}
+
+// Function that decides whether to go to the poste
+bool poste_decision() {
+    return (rand() % P_SERV_MAX) >= P_SERV_MIN;
+}
+
+// generate the list of services to be done for the day
 int generate_service_list(int list[MAX_N_REQUESTS]) {
     int max = (rand() % MAX_N_REQUESTS) + 1;
-
     for (int i = 0; i < max; i++) {
         list[i] = rand() % NUM_SERVICE_TYPES;
     }
-
     return max;
 }
 
 int generate_walk_in_time(int num_requests) {
     unsigned int max = (WORKER_SHIFT_CLOSE - (0.4 * num_requests)) - WORKER_SHIFT_OPEN;
-
     int hour = (rand() % max) + WORKER_SHIFT_OPEN;
-
     return (hour * 60) + (rand() % 60) + 1;
 }
 
-// Main implementation
+void update_fails_stats(poste_stats *shared_stats, int service_id) {
+    sem_wait(&shared_stats->stats_lock);
+    shared_stats->simulation_global.failed_services++;
+    shared_stats->simulation_services[service_id].failed_services++;
+    shared_stats->today.global.failed_services++;
+    shared_stats->today.services[service_id].failed_services++;
+    sem_post(&shared_stats->stats_lock);
+}
+
+void update_success_stats(poste_stats *shared_stats, int service_id, double wait_time, double service_time) {
+    sem_wait(&shared_stats->stats_lock);
+    shared_stats->simulation_global.served_users++;
+    shared_stats->simulation_services[service_id].served_users++;
+    shared_stats->simulation_services[service_id].total_wait_time += wait_time;
+    shared_stats->simulation_services[service_id].total_service_time += service_time;
+    shared_stats->today.global.served_users++;
+    shared_stats->today.services[service_id].served_users++;
+    shared_stats->today.services[service_id].total_wait_time += wait_time;
+    shared_stats->today.services[service_id].total_service_time += service_time;
+    sem_post(&shared_stats->stats_lock);
+}
+
 #ifndef UNIT_TEST
 int main() {
     int open_shm[] = {};
@@ -106,87 +179,190 @@ int main() {
 
     key_t key = ftok(KEY_TICKET_MSG, PROJ_ID);
     if (key == -1) {
-        fprintf(stderr, "UTENTE[%d] ERROR ftok: %s\n", getpid(), strerror(errno));
+        fprintf(stderr, PREFIX " ERROR ftok: %s\n", strerror(errno));
         fflush(stderr);
         return 1;
     }
     mq_id qid = mq_open(key, 0, 0666);
     if (qid < 0) {
-        fprintf(stderr, "UTENTE[%d] ERROR mq_open: %s\n", getpid(), strerror(errno));
+        fprintf(stderr, PREFIX " ERROR mq_open: %s\n", strerror(errno));
         fflush(stderr);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
-    struct timespec t1, t2;
-    t1.tv_sec = 0;
-    t1.tv_nsec = N_NANO_SECS * 5; //avoid spamming too much (check every 5 minutes simulation time)
+    struct timespec t1 = { .tv_sec = 0, .tv_nsec = N_NANO_SECS * 5 };
+    struct timespec t2;
 
-    poste_stats *shared_stats = (poste_stats *) init_shared_memory(
+    poste_stats *shared_stats = (poste_stats*) init_shared_memory(
         SHM_STATS_NAME, SHM_STATS_SIZE, open_shm, &open_shm_index);
+
+    poste_stations *shared_stations = (poste_stations*) init_shared_memory(
+        SHM_STATIONS_NAME, SHM_STATIONS_SIZE, open_shm, &open_shm_index);
 
     srand((unsigned)getpid());
 
     sem_wait(&shared_stats->day_update_event);
 
     while (true) {
-        printf("UTENTE[%d]: Starting work for the day\n", getpid());
+        printf(PREFIX " Starting the day\n");
         fflush(stdout);
-
-        // Avoid weird timing errors
         sleep(1);
 
         if (poste_decision()) {
             int list[MAX_N_REQUESTS] = {};
             int n_requests = generate_service_list(list);
-
-            //Generate exact minute of walk in
             int walk_in_time = generate_walk_in_time(n_requests);
 
+            // Wait for the poste to open
+            sem_wait(&shared_stats->open_poste_event);
+
+            // Choose to use busy waiting even tho it is not the best practice
+            // I thought having multiple semaphores for randomly generated walk in times
+            // would be too much overhead
             while (shared_stats->current_minute < walk_in_time) {
-                int sleep_nano_res = nanosleep(&t1, &t2);
-                if (sleep_nano_res != 0) {
-                    printf("Sleep was interrupted.\n");
+                if (nanosleep(&t1, &t2) != 0) {
+                    printf(PREFIX " Sleep was interrupted.\n");
                     exit(EXIT_FAILURE);
                 }
-
-                //printf("current time: %d\n", shared_stats->current_minute);
             }
 
-            printf("UTENTE[%d]: [%d:%d] Going to the Poste\n", getpid(), (walk_in_time % 24) + 1, (int) walk_in_time / 24);
+            printf(PREFIX " [%02d:%02d] Going to the Poste\n",
+                   (walk_in_time / 60), (walk_in_time % 60));
 
             for (int i = 0; i < n_requests; i++) {
-                sem_wait(&shared_stats->stats_lock);
                 if (shared_stats->current_minute > WORKER_SHIFT_CLOSE) {
-                    shared_stats->simulation_global.failed_services++;
-                    shared_stats->simulation_services[list[i]].failed_services++;
-                    shared_stats->today.global.failed_services++;
-                    shared_stats->today.services[list[i]].failed_services++;
-                    
-                    sem_post(&shared_stats->stats_lock);
+                    update_fails_stats(shared_stats, list[i]);
+                    printf(PREFIX " [%02d:%02d] Failed to get service %s, too late\n",
+                           shared_stats->current_minute / 60,
+                           shared_stats->current_minute % 60,
+                           services[list[i]]);
+                    fflush(stdout);
                     continue;
                 }
-                sem_post(&shared_stats->stats_lock);
 
-                if (send_ticket_request(qid, list[i]) == 0) { continue; }
+                bool found_valid_service = false;
 
+                // Search if the service is available
+                for (int j = 0; j < NUM_SERVICE_TYPES; j++) {
+                    if (shared_stations->NOF_WORKER_SEATS[j].service_id == list[i]) {
+                        printf(PREFIX " [%02d:%02d] Requesting service %s\n",
+                               shared_stats->current_minute / 60,
+                               shared_stats->current_minute % 60,
+                               services[j]);
+                        fflush(stdout);
+
+                        found_valid_service = true;
+                        break;
+                    }
+                }
+
+                // Check if the service was found
+                if (!found_valid_service) {
+                    update_fails_stats(shared_stats, list[i]);
+                    printf(PREFIX " [%02d:%02d] Service %s not available, skipping\n",
+                           shared_stats->current_minute / 60,
+                           shared_stats->current_minute % 60,
+                           services[list[i]]);
+                    fflush(stdout);
+                    continue;
+                }
+
+                if (!send_ticket_request(qid, list[i])) {
+                    continue;
+                }
                 ticket_response res = await_ticket_response(qid);
-                if (res.ticket_number == -1) { continue; }
+                if (res.ticket_number == -1) {
+                    continue;
+                }
 
-                // TO-DO Logic for actually doing the work after implementing workers
-            } 
-            
+                // Search for a available operator
+                bool found_operator = false;
+                int operator_index = -1;
+                for (int j = 0; j < NUM_WORKER_SEATS; j++){
+                    if (shared_stations->NOF_WORKER_SEATS[j].user_status == FREE &&
+                        shared_stations->NOF_WORKER_SEATS[j].service_id == list[i])
+                    {
+                        printf(PREFIX " [%02d:%02d] Found operator for service %s, ticket number %d\n",
+                               shared_stats->current_minute / 60,
+                               shared_stats->current_minute % 60,
+                               services[list[i]], res.ticket_number);
+                        fflush(stdout);
+
+                        sem_wait(&shared_stations->stations_lock);
+                        shared_stations->NOF_WORKER_SEATS[j].user_status = OCCUPIED;
+                        sem_post(&shared_stations->stations_lock);
+
+                        found_operator = true;
+                        operator_index = j;
+                        break;
+                    }
+                }
+
+                // Wait for a station to become available
+                while (!found_operator) {
+                    sem_wait(&shared_stations->stations_event);
+                    sem_wait(&shared_stations->stations_lock);
+                    for (int j = 0; j < NUM_WORKER_SEATS; j++){
+                        if (shared_stations->NOF_WORKER_SEATS[j].user_status == FREE &&
+                            shared_stations->NOF_WORKER_SEATS[j].service_id == list[i])
+                        {
+                            printf(PREFIX " [%02d:%02d] Found operator for service %s, ticket number %d\n",
+                                shared_stats->current_minute / 60,
+                                shared_stats->current_minute % 60,
+                                services[list[i]], res.ticket_number);
+                            fflush(stdout);
+
+                            shared_stations->NOF_WORKER_SEATS[j].user_status = OCCUPIED;
+
+                            found_operator = true;
+                            operator_index = j;
+                            break;
+                        }
+                    }
+                    sem_post(&shared_stations->stations_lock);
+                }
+                // Operator_seat object
+                worker_seat operator_seat = shared_stations->NOF_WORKER_SEATS[operator_index];
+
+                // Calculate wait time
+                int start_wait = shared_stats->current_minute;
+
+                if (!send_service_request(qid, res.ticket_number, operator_seat.operator_process)) {
+                    update_fails_stats(shared_stats, list[i]);
+                    continue;
+                }
+
+                printf(PREFIX " [%02d:%02d] Sent service request for ticket number %d\n",
+                       shared_stats->current_minute / 60,
+                       shared_stats->current_minute % 60,
+                       res.ticket_number);
+
+
+                // Wait for the service to be done
+                service_done done = await_service_done(qid);
+                if (done.ticket_number == -1) {
+                    update_fails_stats(shared_stats, list[i]);
+                    continue;
+                }
+
+                int wait_time = shared_stats->current_minute - start_wait;
+
+                printf(PREFIX " [%02d:%02d] Service done for ticket number %d, service time: %.2f seconds\n",
+                       shared_stats->current_minute / 60,
+                       shared_stats->current_minute % 60,
+                       done.ticket_number, done.service_time);
+
+                update_success_stats(shared_stats, done.service_id, wait_time, done.service_time);
+            }
+        } else {
+            printf(PREFIX " Decided not to go to Poste today\n");
         }
-        else {
-            printf("UTENTE[%d]: Decided to not go to Poste today\n", getpid());
-        }
 
-        printf("UTENTE[%d]: Waiting for next day signal\n", getpid());
+        printf(PREFIX " Waiting for next day signal\n");
         fflush(stdout);
-        sem_wait(&shared_stats->day_update_event);  // await new day
-        printf("UTENTE[%d]: Next day arrived\n", getpid());
+        sem_wait(&shared_stats->day_update_event);
+        printf(PREFIX " Next day signal received\n");
         fflush(stdout);
-
-        // Delay to not clutter the terminal
         sleep(1);
     }
 

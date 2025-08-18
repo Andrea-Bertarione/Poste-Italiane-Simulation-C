@@ -13,6 +13,6 @@ typedef struct S_poste_stations poste_stations;
 typedef struct S_worker_seat worker_seat;
 
 int day_to_minutes(int days);
-void start_new_day(int day, poste_stats* shared_stats);
+void start_new_day(int day, poste_stats* shared_stats, poste_stations* shared_stations);
 
 #endif
