@@ -6,7 +6,7 @@
 #include <semaphore.h>
 
 #define SIM_DURATION 5 // days
-#define N_NANO_SECS 10000000L // 0.01s (1 minute)
+#define N_NANO_SECS 50000000L // 0.05s (1 minute)
 #define NUM_OPERATORS     10 // default without configs
 #define NUM_USERS         5 // default without configs
 #define NUM_WORKER_SEATS 15 // default without configs
