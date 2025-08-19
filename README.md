@@ -235,37 +235,37 @@ Si intende simulare il funzionamento di un ufficio postale. A tal fine sono pres
 | Acquisto prodotti finanziari | 20 |
 | Acquisto orologi e braccialetti | 20 |
 
-• L'utente richiede un ticket specifico per uno dei servizi elencati in Tab. 1, attende il proprio turno, riceve la prestazione richiesta e torna a casa.
-• Esistono risorse di tipo sportello; ogni sportello è specializzato nel fornire un solo tipo di prestazione, che varia ogni giorno della simulazione (vedi sopra elenco dei possibili servizi). Gli sportelli aprono e chiudono secondo la disponibilità degli operatori.
-• NOF_WORKERS processi di tipo operatore: hanno un orario di lavoro, effettuano pause casuali.
-• NOF_USERS processi di tipo utente. Il processo utente decide se recarsi all'ufficio postale e sceglie il servizio da richiedere.
+- L'utente richiede un ticket specifico per uno dei servizi elencati in Tab. 1, attende il proprio turno, riceve la prestazione richiesta e torna a casa.
+- Esistono risorse di tipo sportello; ogni sportello è specializzato nel fornire un solo tipo di prestazione, che varia ogni giorno della simulazione (vedi sopra elenco dei possibili servizi). Gli sportelli aprono e chiudono secondo la disponibilità degli operatori.
+- NOF_WORKERS processi di tipo operatore: hanno un orario di lavoro, effettuano pause casuali.
+- NOF_USERS processi di tipo utente. Il processo utente decide se recarsi all'ufficio postale e sceglie il servizio da richiedere.
 
 ### Processo Direttore
 
 Il processo direttore è responsabile dell'avvio della simulazione, della creazione delle risorse di tipo sportello, dei processi operatore e utente, delle statistiche e della terminazione. Si noti bene che il processo direttore non si occupa dell'aggiornamento delle statistiche, ma solo della loro lettura, secondo quanto indicato. All'avvio, il processo direttore:
 
-• crea un solo processo erogatore ticket.
-• crea NOF_WORKER_SEATS risorse di tipo sportello.
-• crea NOF_WORKERS processi di tipo operatore.
-• crea NOF_USERS processi di tipo utente.
+- crea un solo processo erogatore ticket.
+- crea NOF_WORKER_SEATS risorse di tipo sportello.
+- crea NOF_WORKERS processi di tipo operatore.
+- crea NOF_USERS processi di tipo utente.
 
 > Successivamente il direttore avvia la simulazione, che avrà come durata SIM_DURATION giorni, dove ciascun minuto è simulato dal trascorrere di N_NANO_SECS nanosecondi. La simulazione deve cominciare solamente quando tutti i processi erogatore, operatore e utente sono stati creati e hanno terminato la fase di inizializzazione. Alla fine di ogni giornata, il processo direttore dovrà stampare le statistiche totali e quelle della giornata, che comprendono:
 
-• il numero di utenti serviti totali nella simulazione
-• il numero di utenti serviti in media al giorno
-• il numero di servizi erogati totali nella simulazione
-• il numero di servizi non erogati totali nella simulazione
-• il numero di servizi erogati in media al giorno
-• il numero di servizi non erogati in media al giorno
-• il tempo medio di attesa degli utenti nella simulazione
-• il tempo medio di attesa degli utenti nella giornata
-• il tempo medio di erogazione dei servizi nella simulazione
-• il tempo medio di erogazione dei servizi nella giornata
-• le statistiche precedenti suddivise per tipologia di servizio
-• il numero di operatori attivi durante la giornata;
-• il numero di operatori attivi durante la simulazione;
-• il numero medio di pause effettuate nella giornata e il totale di pause effettuate durante la simulazione;
-• il rapporto fra operatori disponibili e sportelli esistenti, per ogni sportello per ogni giornata.
+- il numero di utenti serviti totali nella simulazione
+- il numero di utenti serviti in media al giorno
+- il numero di servizi erogati totali nella simulazione
+- il numero di servizi non erogati totali nella simulazione
+- il numero di servizi erogati in media al giorno
+- il numero di servizi non erogati in media al giorno
+- il tempo medio di attesa degli utenti nella simulazione
+- il tempo medio di attesa degli utenti nella giornata
+- il tempo medio di erogazione dei servizi nella simulazione
+- il tempo medio di erogazione dei servizi nella giornata
+- le statistiche precedenti suddivise per tipologia di servizio
+- il numero di operatori attivi durante la giornata;
+- il numero di operatori attivi durante la simulazione;
+- il numero medio di pause effettuate nella giornata e il totale di pause effettuate durante la simulazione;
+- il rapporto fra operatori disponibili e sportelli esistenti, per ogni sportello per ogni giornata.
 
 ### Processo erogatore ticket
 
@@ -279,22 +279,22 @@ Ogni giorno lo sportello è associato a un tipo di servizio dal direttore: ogni 
 
 All'avvio, ogni processo operatore viene creato in modo che sia in grado di erogare uno dei servizi citati in Sezione 5. Tale mansione resta invariata per tutta la simulazione. All'inizio di ogni giornata lavorativa, l'operatore:
 
-• Compete con gli altri operatori per la ricerca di uno sportello libero tra quelli disponibili nell'ufficio postale che si occupano del servizio che lui è in grado di svolgere
-• Se ne trova uno, lo occupa e comincia il proprio lavoro che terminerà alla fine della giornata lavorativa
-• Con un massimo di NOF_PAUSE volte per tutta la simulazione, l'operatore può decidere (secondo un criterio scelto dal programmatore) di interrompere il servizio della giornata anticipatamente. In questo caso:
-• termina di servire il cliente che stava servendo;
-• lascia libero lo sportello occupato;
-• aggiorna le statistiche.
+- Compete con gli altri operatori per la ricerca di uno sportello libero tra quelli disponibili nell'ufficio postale che si occupano del servizio che lui è in grado di svolgere
+- Se ne trova uno, lo occupa e comincia il proprio lavoro che terminerà alla fine della giornata lavorativa
+- Con un massimo di NOF_PAUSE volte per tutta la simulazione, l'operatore può decidere (secondo un criterio scelto dal programmatore) di interrompere il servizio della giornata anticipatamente. In questo caso:
+- termina di servire il cliente che stava servendo;
+- lascia libero lo sportello occupato;
+- aggiorna le statistiche.
 Il processo operatore che al suo arrivo non trova uno sportello libero:
-• resta in attesa che uno sportello si liberi (per una pausa di un altro operatore);
-• torna a casa a fine giornata, e si ripresenta regolarmente il giorno dopo.
+- resta in attesa che uno sportello si liberi (per una pausa di un altro operatore);
+- torna a casa a fine giornata, e si ripresenta regolarmente il giorno dopo.
 
 ### Processo utente
 
 Ogni processo utente si reca presso l'ufficio postale saltuariamente per richiedere un servizio tra quelli disponibili. Più in dettaglio, ogni giorno ogni processo utente:
 
-• decide se recarsi o meno all'ufficio postale, secondo una probabilità P_SERV differente per ogni utente e scelta singolarmente in fase di creazione dell'utente in un intervallo compreso tra i valori [P_SERV_MIN, P_SERV_MAX].
-• In caso affermativo
+- decide se recarsi o meno all'ufficio postale, secondo una probabilità P_SERV differente per ogni utente e scelta singolarmente in fase di creazione dell'utente in un intervallo compreso tra i valori [P_SERV_MIN, P_SERV_MAX].
+- In caso affermativo
   i. Stabilisce il servizio di cui vuole usufruire (secondo un criterio stabilito dall'utente);
   ii. Stabilisce un orario (secondo un criterio stabilito dall'utente);
   iii. Si reca all'ufficio postale;
@@ -308,17 +308,17 @@ Se al termine della giornata l'utente si trova ancora in coda, abbandona l'uffic
 ### Terminazione
 
 La simulazione termina in una delle seguenti circostanze:
-timeout: raggiungimento della durata impostata SIM_DURATION giorni
-explode: numero di utenti in attesa al termine della giornata maggiore del valore EXPLODE_THRESHOLD
-Il gruppo di studenti deve produrre configurazioni (file config_timeout.conf e config_explode.conf) in grado di generare la terminazione nei casi sopra descritti. Al termine della simulazione, l'output del programma deve riportare anche la causa di terminazione e le statistiche finali.
+- timeout: raggiungimento della durata impostata SIM_DURATION giorni
+- explode: numero di utenti in attesa al termine della giornata maggiore del valore EXPLODE_THRESHOLD
+> Il gruppo di studenti deve produrre configurazioni (file config_timeout.conf e config_explode.conf) in grado di generare la terminazione nei casi sopra descritti. Al termine della simulazione, l'output del programma deve riportare anche la causa di terminazione e le statistiche finali.
 
 ## Descrizione del progetto: versione "completa" (max 30)
 
 In questa versione:
 
-• un processo utente, quando decide di recarsi all'ufficio postale, genera una lista di al massimo N_REQUESTS richieste di servizi di vario tipo (il numero deve essere scelto in modo casuale per ogni utente, per ogni giorno). Quindi si reca all'ufficio postale dove richiederà in sequenza un ticket per ogni servizio nella lista (il ticket per il servizio i potrà essere richiesto solo quando il servizio i − 1 è stato completato).
-• attraverso un nuovo eseguibile invocabile da linea di comando, deve essere possibile aggiungere alla simulazione altri N_NEW_USERS processi utente oltre a quelli inizialmente generati dal direttore;
-• tutte le statistiche prodotte devono anche essere salvate in un file testo di tipo csv, in modo da poter essere utilizzate per una analisi futura
+- un processo utente, quando decide di recarsi all'ufficio postale, genera una lista di al massimo N_REQUESTS richieste di servizi di vario tipo (il numero deve essere scelto in modo casuale per ogni utente, per ogni giorno). Quindi si reca all'ufficio postale dove richiederà in sequenza un ticket per ogni servizio nella lista (il ticket per il servizio i potrà essere richiesto solo quando il servizio i − 1 è stato completato).
+- attraverso un nuovo eseguibile invocabile da linea di comando, deve essere possibile aggiungere alla simulazione altri N_NEW_USERS processi utente oltre a quelli inizialmente generati dal direttore;
+- tutte le statistiche prodotte devono anche essere salvate in un file testo di tipo csv, in modo da poter essere utilizzate per una analisi futura
 
 ## Configurazione
 
