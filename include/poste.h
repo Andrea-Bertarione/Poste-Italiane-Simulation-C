@@ -5,11 +5,11 @@
 #include <sys/types.h>
 #include <semaphore.h>
 
-#define SIM_DURATION 3 // days
-#define N_NANO_SECS 10000000L // 0.1s
-#define NUM_OPERATORS     4 // default without configs
-#define NUM_USERS         3 // default without configs
-#define NUM_WORKER_SEATS 3 // default without configs
+#define SIM_DURATION 5 // days
+#define N_NANO_SECS 10000000L // 0.01s (1 minute)
+#define NUM_OPERATORS     10 // default without configs
+#define NUM_USERS         5 // default without configs
+#define NUM_WORKER_SEATS 15 // default without configs
 
 #define WORKER_SHIFT_OPEN 8 // 8:00 AM
 #define WORKER_SHIFT_CLOSE 20 // 8:00 PM
@@ -59,6 +59,7 @@ struct S_poste_stats {
     // Synchronization
     sem_t stats_lock;  // Semaphore index for atomic updates
     sem_t open_poste_event; // Semaphore that tells processes when the poste opens
+    sem_t close_poste_event; // Semaphore that tells processes when the poste closes
     sem_t day_update_event; // Semaphore that tells processes when a new day starts
 };
 
@@ -71,7 +72,7 @@ struct S_worker_seat {
 
 struct S_poste_stations {
     //Array of worker seats
-    struct S_worker_seat *NOF_WORKER_SEATS;
+    struct S_worker_seat NOF_WORKER_SEATS[NUM_WORKER_SEATS];
 
     // Synchronization
     sem_t stations_lock;  // Semaphore index for atomic updates

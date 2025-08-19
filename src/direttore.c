@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 199309L
+#define _POSIX_C_SOURCE 200809L
 #define _GNU_SOURCE
 
 #include <stdio.h>
@@ -109,16 +109,58 @@ void print_day_stats(daily_stats today) {
     printf("\n" DIRETTORE_PREFIX " ========================\n");
 }
 
+void print_final_stats(poste_stats *shared_stats) {
+    printf("\n" DIRETTORE_PREFIX " === Final Statistics ===\n");
+    
+    PRINT_STAT("Total active operators", shared_stats->total_active_operators);
+    PRINT_STAT("Total simulation pauses", shared_stats->total_simulation_pauses);
+    PRINT_STAT("Current day", shared_stats->current_day);
+    PRINT_STAT("Current minute", shared_stats->current_minute);
+    
+    printf("\n" DIRETTORE_PREFIX " === Global Statistics ===\n");
+    
+    PRINT_STAT("Total served users", shared_stats->simulation_global.served_users);
+    PRINT_STAT("Total failed services", shared_stats->simulation_global.failed_services);
+    
+    PRINT_FLOAT_STAT("Avg general wait time", 
+                     shared_stats->simulation_global.total_wait_time, 
+                     shared_stats->simulation_global.total_requests);
+    
+    PRINT_FLOAT_STAT("Avg service wait time", 
+                     shared_stats->simulation_global.total_service_time, 
+                     shared_stats->simulation_global.total_requests);
+
+    printf("\n" DIRETTORE_PREFIX " === Global Service Statistics ===\n");
+    for (int i = 0; i < NUM_SERVICE_TYPES; i++) {
+        printf("\n" DIRETTORE_PREFIX " %s:\n", services[i]);
+        
+        printf("  Served users: %d\n", shared_stats->simulation_services[i].served_users);
+        printf("  Failed services: %d\n", shared_stats->simulation_services[i].failed_services);
+        
+        if (shared_stats->simulation_services[i].total_requests > 0) {
+            printf("  Avg general wait time: %.2f\n", 
+                   (float)shared_stats->simulation_services[i].total_wait_time / shared_stats->simulation_services[i].total_requests);
+            printf("  Avg service wait time: %.2f\n", 
+                   (float)shared_stats->simulation_services[i].total_service_time / shared_stats->simulation_services[i].total_requests);
+        } else {
+            printf("  Avg general wait time: N/A\n");
+            printf("  Avg service wait time: N/A\n");
+        }
+    }
+
+    printf("\n" DIRETTORE_PREFIX " ========================\n");
+}
+
 void start_new_day(int day, poste_stats* shared_stats, poste_stations* shared_stations) {
     printf(DIRETTORE_PREFIX " New day beginning, current day = %d\n\n", day);
     printf(DIRETTORE_PREFIX " Showing stats for the day:\n");
     
+    print_day_stats(shared_stats->today);
+
     sem_wait(&shared_stats->stats_lock);
     shared_stats->current_day = day;
     shared_stats->today = (daily_stats) {};
     sem_post(&shared_stats->stats_lock);
-
-    print_day_stats(shared_stats->today);
 
     // Setup worker seats for the new day
     sem_wait(&shared_stations->stations_lock);
@@ -170,6 +212,12 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
+    int sem_close_poste_result = sem_init(&shared_stats->close_poste_event, 1, 0);
+    if (sem_close_poste_result < 0) {
+        perror("sem_init");
+        exit(EXIT_FAILURE);
+    }
+
     int sem_day_result = sem_init(&shared_stats->day_update_event, 1, 0);
     if (sem_day_result < 0) {
         perror("sem_init");
@@ -216,14 +264,21 @@ int main() {
             exit(EXIT_FAILURE);
         }
 
-        if (minutes_elapsed % WORKER_SHIFT_OPEN == 0) {
+        if (minutes_elapsed == (WORKER_SHIFT_OPEN * 60)  && minutes_elapsed != 0) {
+            //printf("TEST OPEN POSTE: MINUTES ELAPSED, %d\n", minutes_elapsed);
             for (int i = 0; i < NUM_OPERATORS + NUM_USERS; i++) {
                 sem_post(&shared_stats->open_poste_event);
             }
-            printf(DIRETTORE_PREFIX " Poste opened for the day\n");
         }
 
-        if (minutes_elapsed % 1440 == 0) {
+        if (minutes_elapsed == (WORKER_SHIFT_CLOSE * 60) && minutes_elapsed != 0) {
+            //printf("TEST CLOSE POSTE: MINUTES ELAPSED, %d\n", minutes_elapsed);
+            for (int i = 0; i < NUM_OPERATORS; i++) {
+                sem_post(&shared_stats->close_poste_event);
+            }
+        }
+
+        if (minutes_elapsed % 1440 == 0) { // 24 hours
             days_elapsed++;
             start_new_day(days_elapsed, shared_stats, shared_stations);
             minutes_elapsed = 0;
@@ -234,8 +289,6 @@ int main() {
         shared_stats->current_minute = minutes_elapsed;
         sem_post(&shared_stats->stats_lock);
     }
-
-    sleep(2);
 
     for (int i = 0; i < idx; i++) {
         kill(children[i], SIGKILL);
@@ -253,6 +306,10 @@ int main() {
                 children[i], WTERMSIG(status));
         }
     }
+
+    print_final_stats(shared_stats);
+    printf(DIRETTORE_PREFIX " Simulation finished, cleaning up...\n");
+    sleep(1);
 
     sem_destroy(&shared_stats->stats_lock);
     sem_destroy(&shared_stations->stations_lock);

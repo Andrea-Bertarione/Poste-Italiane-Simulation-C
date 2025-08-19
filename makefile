@@ -75,3 +75,9 @@ test: unit
 
 clean:
 	rm -rf $(OBJ) $(BIN)
+
+run: clean
+	ipcrm -a
+	make all
+	clear
+	$(BIN)/direttore
