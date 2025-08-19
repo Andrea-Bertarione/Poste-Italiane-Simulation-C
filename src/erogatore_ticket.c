@@ -10,22 +10,14 @@
 #include <time.h>
 #include <string.h>
 
+#include <poste.h>
+
 // Types
 typedef struct S_ticket_queue ticket_queue;
 typedef struct S_ticket ticket;
 typedef enum SERVICE_ID service_id;
 typedef struct S_ticket_request ticket_request;
 typedef struct S_ticket_response ticket_response;
-
-//List of available services
-const char* services[] = {
-    "Invio e ritiro pacchi",
-    "Invio e ritiro lettere e raccomandate",
-    "Prelievi e versamenti Bancoposta",
-    "Pagamento bollettini postali",
-    "Acquisto prodotti finanziari",
-    "Acquisto orologi e braccialetti"
-};
 
 #ifndef UNIT_TEST
 int main() {

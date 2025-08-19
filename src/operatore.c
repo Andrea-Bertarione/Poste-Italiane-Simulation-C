@@ -27,26 +27,6 @@ typedef struct S_service_done      service_done;
 
 #define PREFIX "\033[34m[OPERATORE(%d)]:\033[0m"
 
-// List of available services
-const char* services[] = {
-    "Invio e ritiro pacchi",
-    "Invio e ritiro lettere e raccomandate",
-    "Prelievi e versamenti Bancoposta",
-    "Pagamento bollettini postali",
-    "Acquisto prodotti finanziari",
-    "Acquisto orologi e braccialetti"
-};
-
-// List of durations (Minutes) referenced to services
-const int services_duration[] = {
-    10,
-    8,
-    6,
-    8,
-    20,
-    20
-};
-
 // Centralized function to release a seat and signal waiting operators
 void release_seat(poste_stations *shared_stations, int seat_index) {
     sem_wait(&shared_stations->stations_lock);

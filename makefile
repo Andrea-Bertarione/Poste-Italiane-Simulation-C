@@ -16,10 +16,11 @@ SRCS := $(SRC)/direttore.c \
         $(SRC)/operatore.c \
         $(SRC)/utente.c \
         $(SYS)/msg_queue.c \
-        $(SYS)/shared_mem.c
+        $(SYS)/shared_mem.c \
+		$(SYS)/config.c
 
 # Object files for shared/system modules only
-SYSTEM_OBJS := $(OBJ)/systems/msg_queue.o $(OBJ)/systems/shared_mem.o
+SYSTEM_OBJS := $(OBJ)/systems/msg_queue.o $(OBJ)/systems/shared_mem.o $(OBJ)/systems/config.o
 
 # All object files (for dependency tracking)
 ALL_OBJS := $(OBJ)/direttore.o \
@@ -81,3 +82,15 @@ run: clean
 	make all
 	clear
 	$(BIN)/direttore
+
+run_explode: clean
+	ipcrm -a
+	make all
+	clear
+	$(BIN)/direttore --config ./configs/config_explode.conf
+
+run_timeout: clean
+	ipcrm -a
+	make all
+	clear
+	$(BIN)/direttore --config ./configs/config_timeout.conf

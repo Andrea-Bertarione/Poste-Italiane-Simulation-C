@@ -22,16 +22,6 @@ typedef struct S_worker_seat       worker_seat;
 
 #define PREFIX "\033[32m[UTENTE(%d)]:\033[0m"
 
-// List of available services
-const char* services[] = {
-    "Invio e ritiro pacchi",
-    "Invio e ritiro lettere e raccomandate",
-    "Prelievi e versamenti Bancoposta",
-    "Pagamento bollettini postali",
-    "Acquisto prodotti finanziari",
-    "Acquisto orologi e braccialetti"
-};
-
 // Send a ticket request returns 0 on failure and 1 on success
 int send_ticket_request(mq_id qid, int service) {
     ticket_request req;

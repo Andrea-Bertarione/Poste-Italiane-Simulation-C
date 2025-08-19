@@ -5,21 +5,9 @@
 #include <sys/types.h>
 #include <semaphore.h>
 
-#define SIM_DURATION 5 // days
-#define N_NANO_SECS 50000000L // 0.05s (1 minute)
-#define NUM_OPERATORS     10 // default without configs
-#define NUM_USERS         5 // default without configs
-#define NUM_WORKER_SEATS 15 // default without configs
-
-#define WORKER_SHIFT_OPEN 8 // 8:00 AM
-#define WORKER_SHIFT_CLOSE 20 // 8:00 PM
-#define PA
-#define P_SERV_MIN 20
-#define P_SERV_MAX 100
+#include <config.h>
 
 #define MAX_N_REQUESTS 10
-
-#define NUM_SERVICE_TYPES 6  // From Table 1 in specs
 
 typedef enum SEAT_STATUS {
     FREE,
