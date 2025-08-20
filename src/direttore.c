@@ -167,27 +167,18 @@ void start_new_day(int day,
 
 #ifndef UNIT_TEST
 int main(const int argc, const char *argv[]) {
+    char *config_file = NULL;
     if (argc > 1) {
         if (strcmp(argv[1], "--config") == 0 && argc == 3) {
-            load_config((char *)argv[2]);
-        } else {
-            load_config(NULL);
+            config_file = (char *)argv[2];
         }
-    } else {
-        load_config(NULL);
     }
-
-    pid_t children[1 + g_config.num_operators + g_config.num_users];
-    int idx = 0;
 
     int open_shm[2];
     int open_shm_index = 0;
 
     poste_stats    *shared_stats;
     poste_stations *shared_stations;
-
-    struct timespec t1 = { .tv_sec = 0, .tv_nsec = g_config.minute_duration };
-    struct timespec t2;
 
     int minutes_elapsed = 0;
     int days_elapsed    = 0;
@@ -201,8 +192,6 @@ int main(const int argc, const char *argv[]) {
                                          open_shm,
                                          &open_shm_index);
 
-    memset(shared_stats, 0, SHM_STATS_SIZE);
-
     // Initialize semaphores...
     sem_init(&shared_stats->stats_lock,       1, 1);
     sem_init(&shared_stats->open_poste_event, 1, 0);
@@ -211,6 +200,22 @@ int main(const int argc, const char *argv[]) {
     sem_init(&shared_stations->stations_lock, 1, 1);
     sem_init(&shared_stations->stations_event,1, 0);
     sem_init(&shared_stations->stations_freed_event,1,0);
+
+    load_config(config_file);
+    if (config_file != NULL) {
+        sem_wait(&shared_stats->stats_lock);
+        for (int i = 0; i < 300 && config_file[i] != '\0'; i++) {
+            shared_stats->configuration_file[i] = config_file[i];
+        }
+        shared_stats->configuration_file[strlen(config_file)] = '\0';
+        sem_post(&shared_stats->stats_lock);
+    }
+    
+    pid_t children[1 + g_config.num_operators + g_config.num_users];
+    int idx = 0;
+
+    struct timespec t1 = { .tv_sec = 0, .tv_nsec = g_config.minute_duration };
+    struct timespec t2;
 
     children[idx++] = start_process(TICKET);
     sleep(1);
@@ -248,6 +253,12 @@ int main(const int argc, const char *argv[]) {
 
         if (minutes_elapsed % (g_config.worker_shift_close * 60) == 0) {
             days_elapsed++;
+
+            if (shared_stats->today.late_users > g_config.explode_max) {
+                printf(DIRETTORE_PREFIX " Too many late users today, exploding!\n");
+                break;
+            }
+
             start_new_day(days_elapsed,
                           shared_stats,
                           shared_stations);

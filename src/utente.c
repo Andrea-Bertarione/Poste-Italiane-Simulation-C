@@ -112,12 +112,12 @@ service_done await_service_done(mq_id qid) {
 
 // Function that decides whether to go to the poste
 bool poste_decision() {
-    return (rand() % P_SERV_MAX) >= P_SERV_MIN;
+    return (rand() % g_config.p_serv_max) >= g_config.p_serv_min;
 }
 
 // Generate the list of services to be done for the day
-int generate_service_list(int list[MAX_N_REQUESTS]) {
-    int max = (rand() % MAX_N_REQUESTS) + 1;
+int generate_service_list(int list[g_config.max_n_requests]) {
+    int max = (rand() % g_config.max_n_requests) + 1;
     for (int i = 0; i < max; i++) {
         list[i] = rand() % NUM_SERVICE_TYPES;
     }
@@ -125,8 +125,8 @@ int generate_service_list(int list[MAX_N_REQUESTS]) {
 }
 
 int generate_walk_in_time(int num_requests) {
-    unsigned int max = (WORKER_SHIFT_CLOSE - (0.4 * num_requests)) - WORKER_SHIFT_OPEN;
-    int hour = (rand() % max) + WORKER_SHIFT_OPEN;
+    unsigned int max = (g_config.worker_shift_close - (0.4 * num_requests)) - g_config.worker_shift_open;
+    int hour = (rand() % max) + g_config.worker_shift_open;
     return (hour * 60) + (rand() % 60) + 1;
 }
 
@@ -174,14 +174,16 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    struct timespec t1 = { .tv_sec = 0, .tv_nsec = N_NANO_SECS * 5 };
-    struct timespec t2;
-
     poste_stats *shared_stats = (poste_stats*) init_shared_memory(
         SHM_STATS_NAME, SHM_STATS_SIZE, open_shm, &open_shm_index);
 
     poste_stations *shared_stations = (poste_stations*) init_shared_memory(
         SHM_STATIONS_NAME, SHM_STATIONS_SIZE, open_shm, &open_shm_index);
+    
+    load_config(shared_stats->configuration_file);
+
+    struct timespec t1 = { .tv_sec = 0, .tv_nsec = g_config.minute_duration * 5 };
+    struct timespec t2;
 
     srand((unsigned)getpid());
 
@@ -192,8 +194,10 @@ int main() {
         fflush(stdout);
         sleep(1);
 
+        bool is_late = false;
+
         if (poste_decision()) {
-            int list[MAX_N_REQUESTS] = {};
+            int list[50]; // Assuming max 50 requests (using an extern variable makes it so its a 0 length array)
             int n_requests = generate_service_list(list);
             int walk_in_time = generate_walk_in_time(n_requests);
 
@@ -213,7 +217,7 @@ int main() {
                    (walk_in_time / 60), (walk_in_time % 60));
 
             for (int i = 0; i < n_requests; i++) {
-                if (shared_stats->current_minute > (WORKER_SHIFT_CLOSE * 60)) {
+                if (shared_stats->current_minute > (g_config.worker_shift_close * 60)) {
                     update_fails_stats(shared_stats, list[i]);
                     printf(PREFIX " [%02d:%02d] Failed to get service %s, too late\n",
                            getpid(),
@@ -221,6 +225,9 @@ int main() {
                            shared_stats->current_minute % 60,
                            services[list[i]]);
                     fflush(stdout);
+
+                    is_late = true;
+
                     continue;
                 }
 
@@ -361,9 +368,16 @@ int main() {
                 shared_stations->NOF_WORKER_SEATS[operator_index].user_status = FREE;
                 sem_post(&shared_stations->stations_lock);
                 sem_post(&shared_stations->stations_freed_event);
+                
             }
         } else {
             printf(PREFIX " Decided not to go to Poste today\n", getpid());
+        }
+
+        if (is_late) {
+            sem_wait(&shared_stats->stats_lock);
+            shared_stats->today.late_users++;
+            sem_post(&shared_stats->stats_lock);
         }
 
         printf(PREFIX " Waiting for next day signal\n", getpid());

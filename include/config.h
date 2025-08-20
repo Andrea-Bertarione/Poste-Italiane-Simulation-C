@@ -9,6 +9,7 @@
 #define P_SERV_MIN 20
 #define P_SERV_MAX 100
 #define EXPLODE_MAX 30 // Maximum number of users that can still waiting at the end of the day, otherwise the process explodes
+#define MAX_N_REQUESTS 10 // Maximum number of requests a user can make in a day
 
 struct poste_config {
     int num_operators; // Number of operators in the simulation
@@ -21,6 +22,7 @@ struct poste_config {
     int worker_shift_open; // Opening time of the worker shift in minutes
     int worker_shift_close; // Closing time of the worker shift in minutes
     int explode_max; // Maximum number of users that can still waiting at the end of the day, otherwise the process explodes
+    int max_n_requests; // Maximum number of requests a user can make in a day
 };
 
 #define NUM_SERVICE_TYPES 6  // From Table 1 in specs

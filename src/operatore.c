@@ -122,6 +122,8 @@ int main() {
     poste_stations *shared_stations = (poste_stations*) init_shared_memory(
         SHM_STATIONS_NAME, SHM_STATIONS_SIZE, open_shm, &open_shm_index);
 
+    load_config(shared_stats->configuration_file);
+
     srand((unsigned)getpid());
 
     sem_wait(&shared_stats->day_update_event);
@@ -160,7 +162,7 @@ int main() {
 
             // Try to find ANY available seat (flexible operators)
             sem_wait(&shared_stations->stations_lock);
-            for (int i = 0; i < NUM_WORKER_SEATS; i++) {
+            for (int i = 0; i < g_config.num_worker_seats; i++) {
                 if (shared_stations->NOF_WORKER_SEATS[i].operator_status == FREE) {
                     take_seat(shared_stations, i);
                     worked_today = true;
@@ -210,7 +212,7 @@ int main() {
 
                 if (service_req.ticket_number == -2) {
                     // No message available, short sleep and continue
-                    struct timespec short_sleep = { .tv_sec = 0, .tv_nsec = N_NANO_SECS / 10 };
+                    struct timespec short_sleep = { .tv_sec = 0, .tv_nsec = g_config.minute_duration };
                     nanosleep(&short_sleep, NULL);
                     continue;
                 }
@@ -237,7 +239,7 @@ int main() {
                        service_req.ticket_number, nominal);
                 fflush(stdout);
 
-                long long base_nano = (long long)nominal * N_NANO_SECS;
+                long long base_nano = (long long)nominal * g_config.minute_duration;
                 long long min_nano  = base_nano / 2;
                 long long max_nano  = base_nano + base_nano / 2;
                 long long span      = max_nano - min_nano + 1;
@@ -276,7 +278,7 @@ int main() {
 
                 // Send service done message
                 if (!send_service_done(qid, service_req.ticket_number, service_req.sender_pid,
-                                       seat_struct.service_id, (double)rand_nano / N_NANO_SECS)) {
+                                       seat_struct.service_id, (double)rand_nano / g_config.minute_duration)) {
                     printf(PREFIX " Failed to send service done message for ticket %d\n",
                            getpid(), service_req.ticket_number);
                     fflush(stdout);
@@ -287,16 +289,16 @@ int main() {
                 sem_wait(&shared_stats->stats_lock);
                 shared_stats->simulation_services[seat_struct.service_id].served_users++;
                 shared_stats->simulation_services[seat_struct.service_id].total_requests++;
-                shared_stats->simulation_services[seat_struct.service_id].total_service_time += (double)rand_nano / N_NANO_SECS;
+                shared_stats->simulation_services[seat_struct.service_id].total_service_time += (double)rand_nano / g_config.minute_duration;
                 shared_stats->simulation_global.served_users++;
                 shared_stats->simulation_global.total_requests++;
-                shared_stats->simulation_global.total_service_time += (double)rand_nano / N_NANO_SECS;
+                shared_stats->simulation_global.total_service_time += (double)rand_nano / g_config.minute_duration;
                 shared_stats->today.services[seat_struct.service_id].served_users++;
                 shared_stats->today.services[seat_struct.service_id].total_requests++;
-                shared_stats->today.services[seat_struct.service_id].total_service_time += (double)rand_nano / N_NANO_SECS;
+                shared_stats->today.services[seat_struct.service_id].total_service_time += (double)rand_nano / g_config.minute_duration;
                 shared_stats->today.global.served_users++;
                 shared_stats->today.global.total_requests++;
-                shared_stats->today.global.total_service_time += (double)rand_nano / N_NANO_SECS;
+                shared_stats->today.global.total_service_time += (double)rand_nano / g_config.minute_duration;
                 sem_post(&shared_stats->stats_lock);
 
                 // Randomly decide to take a break (reduced probability to avoid too many breaks)
@@ -315,8 +317,8 @@ int main() {
                     shared_stats->today.total_pauses++;
                     sem_post(&shared_stats->stats_lock);
 
-                    // Take break (shorter duration)
-                    struct timespec break_time = { .tv_sec = 0, .tv_nsec = N_NANO_SECS * (rand() % 10 + 1) };
+                    // Take break
+                    struct timespec break_time = { .tv_sec = 0, .tv_nsec = g_config.minute_duration * ((rand() % 20) + 10) };
                     nanosleep(&break_time, NULL);
 
                     seated_flag = false;

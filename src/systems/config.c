@@ -35,7 +35,8 @@ struct poste_config g_config = {
     .minute_duration = N_NANO_SECS,
     .worker_shift_open = WORKER_SHIFT_OPEN,
     .worker_shift_close = WORKER_SHIFT_CLOSE,
-    .explode_max = EXPLODE_MAX
+    .explode_max = EXPLODE_MAX,
+    .max_n_requests = MAX_N_REQUESTS
 };
 
 // Load configuration from a file or set default values
@@ -43,6 +44,11 @@ void load_config(char *config_file_path) {
     // Load configuration from a file or
     // This is a placeholder for actual configuration loading logic
     if (config_file_path == NULL) {
+        printf("Using default configuration.\n");
+        return;
+    }
+
+    if (config_file_path[0] == '\0') {
         printf("Using default configuration.\n");
         return;
     }
@@ -109,8 +115,29 @@ void load_config(char *config_file_path) {
             iv = atoi(val);
             if (iv >= 0) g_config.explode_max = iv;
         }
+        else if (strcmp(key, "max_n_requests") == 0) {
+            iv = atoi(val);
+            if (iv > 0) g_config.max_n_requests = iv;
+        }
         // unrecognized keys are ignored
     }
 
+    // print current configuration
+    /*
+    printf("Current configuration:\n");
+    printf("  num_operators: %d\n", g_config.num_operators);
+    printf("  num_users: %d\n", g_config.num_users);
+    printf("  num_worker_seats: %d\n", g_config.num_worker_seats);
+    printf("  sim_duration: %d days\n", g_config.sim_duration);
+    printf("  p_serv_min: %ld\n", g_config.p_serv_min);
+    printf("  p_serv_max: %ld\n", g_config.p_serv_max);
+    printf("  minute_duration: %ld nanoseconds\n", g_config.minute_duration);
+    printf("  worker_shift_open: %d\n", g_config.worker_shift_open);
+    printf("  worker_shift_close: %d\n", g_config.worker_shift_close);
+    printf("  explode_max: %d\n", g_config.explode_max);
+    printf("  max_n_requests: %d\n", g_config.max_n_requests);
+    fflush(stdout);
+    */
+   
     fclose(file);
 }

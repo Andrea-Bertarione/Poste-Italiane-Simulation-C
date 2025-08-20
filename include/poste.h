@@ -7,8 +7,6 @@
 
 #include <config.h>
 
-#define MAX_N_REQUESTS 10
-
 typedef enum SEAT_STATUS {
     FREE,
     OCCUPIED
@@ -27,6 +25,7 @@ struct S_daily_stats {
     struct S_service_stats services[NUM_SERVICE_TYPES];
     int active_operators;
     int total_pauses;
+    int late_users;
     int *operator_counter_ratios;  // Per counter
 };
 
@@ -49,6 +48,7 @@ struct S_poste_stats {
     sem_t open_poste_event; // Semaphore that tells processes when the poste opens
     sem_t close_poste_event; // Semaphore that tells processes when the poste closes
     sem_t day_update_event; // Semaphore that tells processes when a new day starts
+    char configuration_file[300]; // Path to the configuration file
 };
 
 struct S_worker_seat {
@@ -60,7 +60,7 @@ struct S_worker_seat {
 
 struct S_poste_stations {
     //Array of worker seats
-    struct S_worker_seat NOF_WORKER_SEATS[NUM_WORKER_SEATS];
+    struct S_worker_seat NOF_WORKER_SEATS[30]; // 30 maximum seats as per the spec
 
     // Synchronization
     sem_t stations_lock;  // Semaphore index for atomic updates
