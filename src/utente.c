@@ -31,10 +31,7 @@ int send_ticket_request(mq_id qid, int service) {
     printf(PREFIX " Sending ticket request (service_id=%d)\n", getpid(), req.service_id);
     fflush(stdout);
 
-    if (mq_send(qid,
-                MSG_TYPE_TICKET_REQUEST,
-                &req,
-                sizeof(req)) < 0) {
+    if (mq_send(qid, MSG_TYPE_TICKET_REQUEST, &req, sizeof(req)) < 0) {
         fprintf(stderr, PREFIX " ERROR mq_send request: %s\n", getpid(), strerror(errno));
         fflush(stderr);
         return 0;
@@ -45,11 +42,8 @@ int send_ticket_request(mq_id qid, int service) {
 // Wait for ticket response
 ticket_response await_ticket_response(mq_id qid) {
     ticket_response res;
-    ssize_t n = mq_receive(qid,
-                           getpid(),
-                           &res,
-                           sizeof(res),
-                           0);
+    ssize_t n = mq_receive(qid, getpid(), &res, sizeof(res), 0);
+
     if (n < 0) {
         if (errno == EINTR) {
             printf(PREFIX " mq_receive interrupted, retrying\n", getpid());
@@ -72,14 +66,10 @@ int send_service_request(mq_id qid, int ticket_number, pid_t operator_pid) {
     req.ticket_number = ticket_number;
 
     long mtype = (MSG_TYPE_SERVICE_REQUEST MSG_TYPE_TICKET_REQUEST_MULT) + operator_pid;
-    printf(PREFIX " Sending service request for ticket %d to operator %d, msg_type=%ld\n",
-           getpid(), ticket_number, operator_pid, mtype);
+    printf(PREFIX " Sending service request for ticket %d to operator %d, msg_type=%ld\n", getpid(), ticket_number, operator_pid, mtype);
     fflush(stdout);
 
-    if (mq_send(qid,
-                mtype,
-                &req,
-                sizeof(req)) < 0) {
+    if (mq_send(qid, mtype, &req, sizeof(req)) < 0) {
         fprintf(stderr, PREFIX " ERROR mq_send service request: %s\n", getpid(), strerror(errno));
         fflush(stderr);
         return 0;
@@ -90,11 +80,7 @@ int send_service_request(mq_id qid, int ticket_number, pid_t operator_pid) {
 // Wait for service done
 service_done await_service_done(mq_id qid) {
     service_done res;
-    ssize_t n = mq_receive(qid,
-                           getpid(),
-                           &res,
-                           sizeof(res),
-                           0);
+    ssize_t n = mq_receive(qid, getpid(), &res, sizeof(res), 0);
     if (n < 0) {
         if (errno == EINTR) {
             printf(PREFIX " mq_receive interrupted, retrying\n", getpid());
@@ -296,8 +282,7 @@ void day_loop(poste_stats *shared_stats, poste_stations *shared_stations, mq_id 
     int n_services = generate_service_list(service_list);
     int walk_in_time = generate_walk_in_time(n_services);
 
-    printf(PREFIX " Generated service list with %d services, walk-in time at %d minutes\n",
-           getpid(), n_services, walk_in_time);
+    printf(PREFIX " Generated service list with %d services, walk-in time at %d minutes\n", getpid(), n_services, walk_in_time);
     fflush(stdout);
 
     // Wait for the poste to open

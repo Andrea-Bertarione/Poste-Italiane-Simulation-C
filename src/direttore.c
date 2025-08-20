@@ -233,22 +233,16 @@ int main(const int argc, const char *argv[]) {
             exit(EXIT_FAILURE);
         }
 
-        if (minutes_elapsed == g_config.worker_shift_open * 60
-         && minutes_elapsed != 0)
-        {
-            for (int i = 0;
-                 i < g_config.num_operators + g_config.num_users;
-                 i++)
-            {
+        if (minutes_elapsed == g_config.worker_shift_open * 60 && minutes_elapsed != 0) {
+            for (int i = 0; i < g_config.num_operators + g_config.num_users; i++) {
                 sem_post(&shared_stats->open_poste_event);
             }
         }
 
-        if (minutes_elapsed == g_config.worker_shift_close * 60
-         && minutes_elapsed != 0)
-        {
-            for (int i = 0; i < g_config.num_operators; i++)
+        if (minutes_elapsed == g_config.worker_shift_close * 60 && minutes_elapsed != 0) {
+            for (int i = 0; i < g_config.num_operators; i++) {
                 sem_post(&shared_stats->close_poste_event);
+            }   
         }
 
         if (minutes_elapsed % 1440 == 0) {
@@ -259,9 +253,7 @@ int main(const int argc, const char *argv[]) {
                 break;
             }
 
-            start_new_day(days_elapsed,
-                          shared_stats,
-                          shared_stations);
+            start_new_day(days_elapsed, shared_stats, shared_stations);
             minutes_elapsed = 0;
         }
 

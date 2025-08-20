@@ -44,19 +44,14 @@ int main() {
     printf("\e[1;33m[EROGATORE TICKET]:\033[0m Ticket generator running on queue %d\n", qid);
     while(running) {
         ticket_request req;
-        ssize_t n = mq_receive(qid,
-                               MSG_TYPE_TICKET_REQUEST,
-                               &req,
-                               sizeof(req),
-                               0);
+        ssize_t n = mq_receive(qid, MSG_TYPE_TICKET_REQUEST, &req, sizeof(req), 0);
         if (n < 0) {
             if (errno == EINTR) continue;  // interrupted by signal
             perror("msgrcv");
             break;
         }
 
-        printf("\e[1;33m[EROGATORE TICKET]:\033[0m Received request from PID %d for service %s\n",
-               req.sender_pid, services[req.service_id]);
+        printf("\e[1;33m[EROGATORE TICKET]:\033[0m Received request from PID %d for service %s\n", req.sender_pid, services[req.service_id]);
 
         //Create new ticket lock from start
         // THIS IS IMPLEMENTATION IS BAREBONES
@@ -86,10 +81,7 @@ int main() {
         resp.generator_pid  = getpid();
         resp.ticket_number  = new_ticket.ticket_number;
 
-        if (mq_send(qid,
-            req.sender_pid,          // mtype == client PID
-            &resp,
-            sizeof(resp)) < 0) {
+        if (mq_send(qid, req.sender_pid, &resp, sizeof(resp)) < 0) {
             perror("mq_send response");
         }
         
