@@ -7,6 +7,8 @@
 
 #include <config.h>
 
+#define MAX_PATH_LENGTH 256
+
 typedef enum SEAT_STATUS {
     FREE,
     OCCUPIED
@@ -48,7 +50,7 @@ struct S_poste_stats {
     sem_t open_poste_event; // Semaphore that tells processes when the poste opens
     sem_t close_poste_event; // Semaphore that tells processes when the poste closes
     sem_t day_update_event; // Semaphore that tells processes when a new day starts
-    char configuration_file[300]; // Path to the configuration file
+    char configuration_file[MAX_PATH_LENGTH]; // Path to the configuration file
 };
 
 struct S_worker_seat {
@@ -60,7 +62,7 @@ struct S_worker_seat {
 
 struct S_poste_stations {
     //Array of worker seats
-    struct S_worker_seat NOF_WORKER_SEATS[30]; // 30 maximum seats as per the spec
+    struct S_worker_seat NOF_WORKER_SEATS[MAX_WORKER_SEATS]; // 30 maximum seats
 
     // Synchronization
     sem_t stations_lock;  // Semaphore index for atomic updates

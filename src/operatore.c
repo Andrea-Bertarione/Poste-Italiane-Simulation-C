@@ -101,7 +101,7 @@ int send_service_done(mq_id qid, int ticket_number, pid_t user_pid, int service_
 }
 
 int main() {
-    int open_shm[] = {};
+    int open_shm[2] = {};
     int open_shm_index = 0;
 
     key_t key = ftok(KEY_TICKET_MSG, PROJ_ID);

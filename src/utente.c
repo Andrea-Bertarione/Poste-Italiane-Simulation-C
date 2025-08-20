@@ -116,7 +116,7 @@ bool poste_decision() {
 }
 
 // Generate the list of services to be done for the day
-int generate_service_list(int list[g_config.max_n_requests]) {
+int generate_service_list(int list[MAX_N_REQUESTS_COMPILE]) {
     int max = (rand() % g_config.max_n_requests) + 1;
     for (int i = 0; i < max; i++) {
         list[i] = rand() % NUM_SERVICE_TYPES;
@@ -158,7 +158,7 @@ void update_success_stats(poste_stats *shared_stats, int service_id, double wait
 
 #ifndef UNIT_TEST
 int main() {
-    int open_shm[] = {};
+    int open_shm[2] = {};
     int open_shm_index = 0;
 
     key_t key = ftok(KEY_TICKET_MSG, PROJ_ID);
@@ -197,14 +197,14 @@ int main() {
         bool is_late = false;
 
         if (poste_decision()) {
-            int list[50]; // Assuming max 50 requests (using an extern variable makes it so its a 0 length array)
+            int list[MAX_N_REQUESTS_COMPILE]; // Assuming max 50 requests (using an extern variable makes it so its a 0 length array)
             int n_requests = generate_service_list(list);
             int walk_in_time = generate_walk_in_time(n_requests);
 
             // Wait for the poste to open
             sem_wait(&shared_stats->open_poste_event);
 
-            // Busy wait until walk-in time
+            // Busy wait until walk-in time, it would add a big layer of complexity to have a semaphore for this
             while (shared_stats->current_minute < walk_in_time) {
                 if (nanosleep(&t1, &t2) != 0) {
                     printf(PREFIX " Sleep was interrupted.\n", getpid());

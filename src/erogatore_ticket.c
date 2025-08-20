@@ -21,7 +21,7 @@ typedef struct S_ticket_response ticket_response;
 
 #ifndef UNIT_TEST
 int main() {
-    int open_shm[] = {};
+    int open_shm[1] = {};
     int open_shm_index = 0;
 
     bool running = true;

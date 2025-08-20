@@ -204,7 +204,7 @@ int main(const int argc, const char *argv[]) {
     load_config(config_file);
     if (config_file != NULL) {
         sem_wait(&shared_stats->stats_lock);
-        for (int i = 0; i < 300 && config_file[i] != '\0'; i++) {
+        for (int i = 0; i < MAX_PATH_LENGTH && config_file[i] != '\0'; i++) {
             shared_stats->configuration_file[i] = config_file[i];
         }
         shared_stats->configuration_file[strlen(config_file)] = '\0';
@@ -251,7 +251,7 @@ int main(const int argc, const char *argv[]) {
                 sem_post(&shared_stats->close_poste_event);
         }
 
-        if (minutes_elapsed % (g_config.worker_shift_close * 60) == 0) {
+        if (minutes_elapsed % 1440 == 0) {
             days_elapsed++;
 
             if (shared_stats->today.late_users > g_config.explode_max) {
