@@ -41,7 +41,7 @@ int main() {
 
     srand(time(NULL));
 
-    printf("\033[32m[EROGATORE TICKET]:\033[0m Ticket generator running on queue %d\n", qid);
+    printf("\e[1;33m[EROGATORE TICKET]:\033[0m Ticket generator running on queue %d\n", qid);
     while(running) {
         ticket_request req;
         ssize_t n = mq_receive(qid,
@@ -55,7 +55,7 @@ int main() {
             break;
         }
 
-        printf("\033[32m[EROGATORE TICKET]:\033[0m Received request from PID %d for service %s\n",
+        printf("\e[1;33m[EROGATORE TICKET]:\033[0m Received request from PID %d for service %s\n",
                req.sender_pid, services[req.service_id]);
 
         //Create new ticket lock from start

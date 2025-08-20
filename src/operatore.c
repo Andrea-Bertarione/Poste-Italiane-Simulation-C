@@ -101,7 +101,7 @@ int send_service_done(mq_id qid, int ticket_number, pid_t user_pid, int service_
 }
 
 int main() {
-    int open_shm[2] = {};
+    int open_shm[] = {};
     int open_shm_index = 0;
 
     key_t key = ftok(KEY_TICKET_MSG, PROJ_ID);
@@ -127,6 +127,8 @@ int main() {
     srand((unsigned)getpid());
 
     sem_wait(&shared_stats->day_update_event);
+
+    bool serving = false;  // Track if currently serving a customer
 
     while (true) {
         printf(PREFIX " Starting work for the day\n", getpid());
@@ -195,14 +197,15 @@ int main() {
             // Working loop - serve customers until break or shift end
             while (seated_flag && !shift_ended) {
                 // Check for shift end while working
-                if (sem_trywait(&shared_stats->close_poste_event) == 0) {
+                bool shift_signal = (sem_trywait(&shared_stats->close_poste_event) == 0);
+                if (shift_signal && !serving) {
                     shift_ended = true;
-                    printf(PREFIX " [%02d:%02d] Received shift end signal while working, cleaning up\n",
-                           getpid(),
-                           shared_stats->current_minute / 60,
-                           shared_stats->current_minute % 60);
+                    printf(PREFIX " [%02d:%02d] Shift ended, going home\n",
+                        getpid(),
+                        shared_stats->current_minute / 60,
+                        shared_stats->current_minute % 60);
                     fflush(stdout);
-
+                    
                     release_seat(shared_stations, current_seat);
                     seated_flag = false;
                     break;
@@ -229,6 +232,8 @@ int main() {
                        shared_stats->current_minute % 60,
                        service_req.ticket_number);
                 fflush(stdout);
+
+                serving = true;  // Mark that we're now serving a customer
 
                 // Simulate service time
                 int nominal = services_duration[seat_struct.service_id];
@@ -282,6 +287,8 @@ int main() {
                     printf(PREFIX " Failed to send service done message for ticket %d\n",
                            getpid(), service_req.ticket_number);
                     fflush(stdout);
+                    
+                    serving = false;  // Clear serving flag on failure
                     continue;
                 }
 
@@ -300,6 +307,21 @@ int main() {
                 shared_stats->today.global.total_requests++;
                 shared_stats->today.global.total_service_time += (double)rand_nano / g_config.minute_duration;
                 sem_post(&shared_stats->stats_lock);
+
+                serving = false;  // Service completed
+
+                // If shift ended while we were serving, now we can leave
+                if (shift_signal) {
+                    printf(PREFIX " [%02d:%02d] Completed last customer, going home\n",
+                        getpid(),
+                        shared_stats->current_minute / 60,
+                        shared_stats->current_minute % 60);
+                    fflush(stdout);
+                    shift_ended = true;
+                    release_seat(shared_stations, current_seat);
+                    seated_flag = false;
+                    break;
+                }
 
                 // Randomly decide to take a break (reduced probability to avoid too many breaks)
                 if (rand() % 100 < 10) {  // Reduced from 20% to 10%

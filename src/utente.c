@@ -111,7 +111,7 @@ service_done await_service_done(mq_id qid) {
 }
 
 // Function that decides whether to go to the poste
-bool poste_decision() {
+bool will_go_to_poste(void) {
     return (rand() % g_config.p_serv_max) >= g_config.p_serv_min;
 }
 
@@ -156,6 +156,170 @@ void update_success_stats(poste_stats *shared_stats, int service_id, double wait
     sem_post(&shared_stats->stats_lock);
 }
 
+// Busy-wait until appointed walk-in time
+void busy_wait_until_walk_in(int walk_in_time, poste_stats *shared_stats) {
+    struct timespec t1 = { .tv_sec = 0, .tv_nsec = g_config.minute_duration * 5 };
+    struct timespec t2;
+    while (shared_stats->current_minute < walk_in_time) {
+        if (nanosleep(&t1, &t2) != 0) {
+            printf(PREFIX " Sleep was interrupted.\n", getpid());
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+// Function that handles users that remains late
+void handle_late_users(poste_stats *shared_stats) {
+    sem_wait(&shared_stats->stats_lock);
+
+    if (shared_stats->today.late_user_done) {
+        sem_post(&shared_stats->stats_lock);
+        return;
+    }
+
+    shared_stats->today.late_users++;
+    shared_stats->today.late_user_done = 1;
+    sem_post(&shared_stats->stats_lock);
+    printf(PREFIX " Late user, incrementing late users count\n", getpid());
+    fflush(stdout);
+}
+
+// Function that search for a operator seat with the correct ID that is occupied
+// Returns the number of valid seats found
+// and fills the valid_seats array with the indices of those seats
+int find_valid_seats(poste_stations *shared_stations, int service_id, int valid_seats[MAX_WORKER_SEATS]) {
+    int count = 0;
+
+    sem_wait(&shared_stations->stations_lock);
+    for (int i = 0; i < g_config.num_worker_seats; i++) {
+        if (shared_stations->NOF_WORKER_SEATS[i].service_id == service_id &&
+            shared_stations->NOF_WORKER_SEATS[i].operator_status == OCCUPIED ) {
+
+            valid_seats[count++] = i;
+        }
+    }
+    sem_post(&shared_stations->stations_lock);
+
+    return count;
+}
+
+// Function that makes the user attempt to take a seat
+// Returns the index of the seat taken, or -1 if no seat was available
+int attempt_take_seat(poste_stations *shared_stations, int valid_seats[MAX_WORKER_SEATS], int n_valid_seats) {
+    int current_seat = -1;
+
+    sem_wait(&shared_stations->stations_lock);
+    for (int i = 0; i < n_valid_seats; i++) {
+        if (shared_stations->NOF_WORKER_SEATS[valid_seats[i]].user_status == FREE) {
+            current_seat = valid_seats[i];
+            shared_stations->NOF_WORKER_SEATS[valid_seats[i]].user_status = OCCUPIED;
+            break;
+        }
+    }
+    sem_post(&shared_stations->stations_lock);
+
+    if (current_seat != -1) {
+        printf(PREFIX " Took seat %d\n", getpid(), current_seat);
+        fflush(stdout);
+    }
+
+    return current_seat;
+}
+
+// Function that handles the service process
+void handle_service(int service_id, mq_id qid, poste_stats *stats, poste_stations *stations) {
+    // send ticket, await response
+    if (!send_ticket_request(qid, service_id)) return;
+    ticket_response tres = await_ticket_response(qid);
+    if (tres.ticket_number < 0) return;
+
+    // find an operator for the service
+    int valid_seats[MAX_WORKER_SEATS];
+    int n_valid_seats = find_valid_seats(stations, service_id, valid_seats);
+    if (n_valid_seats == 0) {
+        printf(PREFIX " No operators available for service %s, failed...\n", getpid(), services[service_id]);
+        fflush(stdout);
+        update_fails_stats(stats, service_id);
+        return;
+    }
+
+    // Attempt to take a seat
+    int current_seat = attempt_take_seat(stations, valid_seats, n_valid_seats);
+    while (current_seat == -1) {
+        // Wait 5 minutes
+        struct timespec t1 = { .tv_sec = 0, .tv_nsec = g_config.minute_duration * 5 };
+        struct timespec t2;
+        if (nanosleep(&t1, &t2) != 0) {
+            printf(PREFIX " Sleep was interrupted.\n", getpid());
+            exit(EXIT_FAILURE);
+        }
+
+        // Check if shift finished while waiting
+        if (stats->current_minute >= g_config.worker_shift_close * 60 && stations->NOF_WORKER_SEATS[current_seat].operator_status == FREE) {
+            printf(PREFIX " Shift ended while waiting for a seat, going home\n", getpid());
+            fflush(stdout);
+
+            handle_late_users(stats);
+            update_fails_stats(stats, service_id);
+
+            return;
+        }
+
+        // Wait for a seat to become available
+        sem_trywait(&stations->stations_freed_event);
+        current_seat = attempt_take_seat(stations, valid_seats, n_valid_seats);
+    }
+
+    // Seat found, now we can send the service request
+    pid_t op_pid = stations->NOF_WORKER_SEATS[current_seat].operator_process;
+
+    int start_wait = stats->current_minute;
+
+    // send to operator and await done
+    if (!send_service_request(qid, tres.ticket_number, op_pid)) {
+        update_fails_stats(stats, service_id);
+        return;
+    }
+    service_done dres = await_service_done(qid);
+    if (dres.ticket_number < 0) {
+        update_fails_stats(stats, service_id);
+        return;
+    }
+
+    // update stats
+    int wait_time = stats->current_minute - start_wait;
+    update_success_stats(stats, dres.service_id, wait_time, dres.service_time);
+}
+
+void day_loop(poste_stats *shared_stats, poste_stations *shared_stations, mq_id qid) {
+    int service_list[MAX_N_REQUESTS_COMPILE];
+    int n_services = generate_service_list(service_list);
+    int walk_in_time = generate_walk_in_time(n_services);
+
+    printf(PREFIX " Generated service list with %d services, walk-in time at %d minutes\n",
+           getpid(), n_services, walk_in_time);
+    fflush(stdout);
+
+    // Wait for the poste to open
+    sem_wait(&shared_stats->open_poste_event);
+    // Then wait for the walk in time
+    busy_wait_until_walk_in(walk_in_time, shared_stats);
+
+    for (int i = 0; i < n_services; i++) {
+        // Check if shift finished while waiting
+        if (shared_stats->current_minute >= g_config.worker_shift_close * 60) {
+            printf(PREFIX " Shift ended while waiting for a seat, going home\n", getpid());
+            fflush(stdout);
+
+            handle_late_users(shared_stats);
+            update_fails_stats(shared_stats, service_list[i]);
+
+            return;
+        }
+        handle_service(service_list[i], qid, shared_stats, shared_stations);
+    }
+}
+
 #ifndef UNIT_TEST
 int main() {
     int open_shm[2] = {};
@@ -182,9 +346,6 @@ int main() {
     
     load_config(shared_stats->configuration_file);
 
-    struct timespec t1 = { .tv_sec = 0, .tv_nsec = g_config.minute_duration * 5 };
-    struct timespec t2;
-
     srand((unsigned)getpid());
 
     sem_wait(&shared_stats->day_update_event);
@@ -194,190 +355,13 @@ int main() {
         fflush(stdout);
         sleep(1);
 
-        bool is_late = false;
-
-        if (poste_decision()) {
-            int list[MAX_N_REQUESTS_COMPILE]; // Assuming max 50 requests (using an extern variable makes it so its a 0 length array)
-            int n_requests = generate_service_list(list);
-            int walk_in_time = generate_walk_in_time(n_requests);
-
-            // Wait for the poste to open
-            sem_wait(&shared_stats->open_poste_event);
-
-            // Busy wait until walk-in time, it would add a big layer of complexity to have a semaphore for this
-            while (shared_stats->current_minute < walk_in_time) {
-                if (nanosleep(&t1, &t2) != 0) {
-                    printf(PREFIX " Sleep was interrupted.\n", getpid());
-                    exit(EXIT_FAILURE);
-                }
-            }
-
-            printf(PREFIX " [%02d:%02d] Going to the Poste\n",
-                   getpid(),
-                   (walk_in_time / 60), (walk_in_time % 60));
-
-            for (int i = 0; i < n_requests; i++) {
-                if (shared_stats->current_minute > (g_config.worker_shift_close * 60)) {
-                    update_fails_stats(shared_stats, list[i]);
-                    printf(PREFIX " [%02d:%02d] Failed to get service %s, too late\n",
-                           getpid(),
-                           shared_stats->current_minute / 60,
-                           shared_stats->current_minute % 60,
-                           services[list[i]]);
-                    fflush(stdout);
-
-                    is_late = true;
-
-                    continue;
-                }
-
-                bool found_valid_service = false;
-                for (int j = 0; j < NUM_SERVICE_TYPES; j++) {
-                    if (
-                        shared_stations->NOF_WORKER_SEATS[j].service_id == list[i] && 
-                        shared_stations->NOF_WORKER_SEATS[j].operator_status == OCCUPIED &&
-                        shared_stations->NOF_WORKER_SEATS[j].user_status == FREE &&
-                        shared_stations->NOF_WORKER_SEATS[j].operator_process != 0
-                    ) {
-                        printf(PREFIX " [%02d:%02d] Requesting service %s\n",
-                               getpid(),
-                               shared_stats->current_minute / 60,
-                               shared_stats->current_minute % 60,
-                               services[j]);
-                        fflush(stdout);
-                        found_valid_service = true;
-                        break;
-                    }
-                    else if (
-                        shared_stations->NOF_WORKER_SEATS[j].service_id == list[i] &&
-                        shared_stations->NOF_WORKER_SEATS[j].operator_status == OCCUPIED &&
-                        shared_stations->NOF_WORKER_SEATS[j].operator_process != 0 &&
-                        shared_stations->NOF_WORKER_SEATS[j].user_status == OCCUPIED
-                    ) {
-                        printf(PREFIX " [%02d:%02d] Service %s is available, but someone else is seated, wait in line...\n",
-                               getpid(),
-                               shared_stats->current_minute / 60,
-                               shared_stats->current_minute % 60,
-                               services[list[i]]);
-                        fflush(stdout);
-
-                        sem_wait(&shared_stations->stations_freed_event);
-                        i--;
-                        continue;
-                    }
-                }
-
-                if (!found_valid_service) {
-                    update_fails_stats(shared_stats, list[i]);
-                    printf(PREFIX " [%02d:%02d] Service %s not available, skipping\n",
-                           getpid(),
-                           shared_stats->current_minute / 60,
-                           shared_stats->current_minute % 60,
-                           services[list[i]]);
-                    fflush(stdout);
-                    continue;
-                }
-
-                if (!send_ticket_request(qid, list[i])) {
-                    continue;
-                }
-                ticket_response res = await_ticket_response(qid);
-                if (res.ticket_number == -1) {
-                    continue;
-                }
-
-                // Search for an available operator
-                bool found_operator = false;
-                int operator_index = -1;
-                for (int j = 0; j < NUM_WORKER_SEATS; j++) {
-                    if (shared_stations->NOF_WORKER_SEATS[j].user_status == FREE &&
-                        shared_stations->NOF_WORKER_SEATS[j].service_id == list[i]) {
-                        printf(PREFIX " [%02d:%02d] Found operator for service %s, ticket number %d\n",
-                               getpid(),
-                               shared_stats->current_minute / 60,
-                               shared_stats->current_minute % 60,
-                               services[list[i]], res.ticket_number);
-                        fflush(stdout);
-
-                        sem_wait(&shared_stations->stations_lock);
-                        shared_stations->NOF_WORKER_SEATS[j].user_status = OCCUPIED;
-                        sem_post(&shared_stations->stations_lock);
-
-                        found_operator = true;
-                        operator_index = j;
-                        break;
-                    }
-                }
-
-                // Wait for a station to become available
-                while (!found_operator) {
-                    sem_wait(&shared_stations->stations_event);
-                    sem_wait(&shared_stations->stations_lock);
-                    for (int j = 0; j < NUM_WORKER_SEATS; j++) {
-                        if (shared_stations->NOF_WORKER_SEATS[j].user_status == FREE &&
-                            shared_stations->NOF_WORKER_SEATS[j].service_id == list[i]) {
-                            printf(PREFIX " [%02d:%02d] Found operator for service %s, ticket number %d\n",
-                                   getpid(),
-                                   shared_stats->current_minute / 60,
-                                   shared_stats->current_minute % 60,
-                                   services[list[i]], res.ticket_number);
-                            fflush(stdout);
-
-                            shared_stations->NOF_WORKER_SEATS[j].user_status = OCCUPIED;
-
-                            found_operator = true;
-                            operator_index = j;
-                            break;
-                        }
-                    }
-                    sem_post(&shared_stations->stations_lock);
-                }
-
-                worker_seat operator_seat = shared_stations->NOF_WORKER_SEATS[operator_index];
-                int start_wait = shared_stats->current_minute;
-
-                if (!send_service_request(qid, res.ticket_number, operator_seat.operator_process)) {
-                    update_fails_stats(shared_stats, list[i]);
-                    continue;
-                }
-
-                printf(PREFIX " [%02d:%02d] Sent service request for ticket number %d\n",
-                       getpid(),
-                       shared_stats->current_minute / 60,
-                       shared_stats->current_minute % 60,
-                       res.ticket_number);
-
-                service_done done = await_service_done(qid);
-                if (done.ticket_number == -1) {
-                    update_fails_stats(shared_stats, list[i]);
-                    continue;
-                }
-
-                int wait_time = shared_stats->current_minute - start_wait;
-
-                printf(PREFIX " [%02d:%02d] Service done for ticket number %d, service time: %.2f seconds\n",
-                       getpid(),
-                       shared_stats->current_minute / 60,
-                       shared_stats->current_minute % 60,
-                       done.ticket_number,
-                       done.service_time);
-
-                update_success_stats(shared_stats, done.service_id, wait_time, done.service_time);
-
-                sem_wait(&shared_stations->stations_lock);
-                shared_stations->NOF_WORKER_SEATS[operator_index].user_status = FREE;
-                sem_post(&shared_stations->stations_lock);
-                sem_post(&shared_stations->stations_freed_event);
-                
-            }
+        if (will_go_to_poste()) {
+            printf(PREFIX " Going to the poste today.\n", getpid());
+            fflush(stdout);
+            day_loop(shared_stats, shared_stations, qid);
         } else {
-            printf(PREFIX " Decided not to go to Poste today\n", getpid());
-        }
-
-        if (is_late) {
-            sem_wait(&shared_stats->stats_lock);
-            shared_stats->today.late_users++;
-            sem_post(&shared_stats->stats_lock);
+            printf(PREFIX " Decided not to go to the poste today.\n", getpid());
+            fflush(stdout);
         }
 
         printf(PREFIX " Waiting for next day signal\n", getpid());
