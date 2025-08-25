@@ -28,7 +28,6 @@ struct S_daily_stats {
     int active_operators;
     int total_pauses;
     int late_users;
-    int late_user_done;
     int *operator_counter_ratios;  // Per counter
 };
 

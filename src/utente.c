@@ -22,6 +22,8 @@ typedef struct S_worker_seat       worker_seat;
 
 #define PREFIX "\033[32m[UTENTE(%d)]:\033[0m"
 
+static bool been_late_today = false;
+
 // Send a ticket request returns 0 on failure and 1 on success
 int send_ticket_request(mq_id qid, int service) {
     ticket_request req;
@@ -170,13 +172,15 @@ void busy_wait_until_walk_in(int walk_in_time, poste_stats *shared_stats) {
 void handle_late_users(poste_stats *shared_stats) {
     sem_wait(&shared_stats->stats_lock);
 
-    if (shared_stats->today.late_user_done) {
+    if (been_late_today) {
         sem_post(&shared_stats->stats_lock);
         return;
     }
+    else {
+        been_late_today = true;
+    }
 
     shared_stats->today.late_users++;
-    shared_stats->today.late_user_done = 1;
     sem_post(&shared_stats->stats_lock);
     printf(PREFIX " Late user, incrementing late users count\n", getpid());
     fflush(stdout);
@@ -253,8 +257,8 @@ void handle_service(int service_id, mq_id qid, poste_stats *stats, poste_station
         }
 
         // Check if shift finished while waiting
-        if (stats->current_minute >= g_config.worker_shift_close * 60 && stations->NOF_WORKER_SEATS[current_seat].operator_status == FREE) {
-            printf(PREFIX " Shift ended while waiting for a seat, going home\n", getpid());
+        if (stats->current_minute >= g_config.worker_shift_close * 60) {
+            printf(PREFIX " Shift ended while waiting for a seat, they made me late, add a explode counter\n", getpid());
             fflush(stdout);
 
             handle_late_users(stats);
@@ -287,6 +291,21 @@ void handle_service(int service_id, mq_id qid, poste_stats *stats, poste_station
     // update stats
     int wait_time = stats->current_minute - start_wait;
     update_success_stats(stats, dres.service_id, wait_time, dres.service_time);
+
+    if (stats->current_minute >= g_config.worker_shift_close * 60) {
+        printf(PREFIX " Shift ended while waiting for a ticket to finish, they made me late, add a explode counter\n", getpid());
+        fflush(stdout);
+
+        handle_late_users(stats);
+
+        return;
+    }
+
+    // Release seat that was taken
+    sem_wait(&stations->stations_lock);
+    stations->NOF_WORKER_SEATS[current_seat].user_status = FREE;
+    sem_post(&stations->stations_lock);
+    sem_post(&stations->stations_freed_event);
 }
 
 void day_loop(poste_stats *shared_stats, poste_stations *shared_stations, mq_id qid) {
@@ -351,6 +370,8 @@ int main() {
         printf(PREFIX " Starting the day\n", getpid());
         fflush(stdout);
         sleep(1);
+
+        been_late_today = false;
 
         if (will_go_to_poste()) {
             printf(PREFIX " Going to the poste today.\n", getpid());

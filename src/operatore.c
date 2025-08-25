@@ -310,8 +310,9 @@ bool work_loop(poste_stats *shared_stats, poste_stations *shared_stations, mq_id
         }
 
         // Should i go home early?
-        if (rand() % 100 < 10 && (*pauses_done) < g_config.nof_pause) {
-            // 10% chance to go home early if i still have pauses left
+        if (rand() % 100 < 1 && (*pauses_done) < g_config.nof_pause) {
+            // 1% chance to go home early if i still have pauses left
+            // 1% Because on config_explode.conf so many ticket happens that having a higher percentage is too risky
             on_shift = false;
             (*pauses_done)++;
             release_seat(shared_stations, current_seat);
