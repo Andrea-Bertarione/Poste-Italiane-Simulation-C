@@ -10,6 +10,7 @@
 #define P_SERV_MAX 100
 #define EXPLODE_MAX 30 // Maximum number of users that can still waiting at the end of the day, otherwise the process explodes
 #define MAX_N_REQUESTS 10 // Maximum number of requests a user can make in a day
+#define NOF_PAUSE 3 // Number of times the operator can finish the day early
 
 #define MAX_N_REQUESTS_COMPILE 50 // Maximum number of requests a user can make in a day for compile time
 #define MAX_WORKER_SEATS 30 // Maximum number of worker seats
@@ -26,6 +27,7 @@ struct poste_config {
     int worker_shift_close; // Closing time of the worker shift in minutes
     int explode_max; // Maximum number of users that can still waiting at the end of the day, otherwise the process explodes
     int max_n_requests; // Maximum number of requests a user can make in a day
+    int nof_pause; // Number of times the operator can finish the day early
 };
 
 #define NUM_SERVICE_TYPES 6  // From Table 1 in specs

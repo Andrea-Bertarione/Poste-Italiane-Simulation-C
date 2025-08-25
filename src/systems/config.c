@@ -36,7 +36,8 @@ struct poste_config g_config = {
     .worker_shift_open = WORKER_SHIFT_OPEN,
     .worker_shift_close = WORKER_SHIFT_CLOSE,
     .explode_max = EXPLODE_MAX,
-    .max_n_requests = MAX_N_REQUESTS
+    .max_n_requests = MAX_N_REQUESTS,
+    .nof_pause = NOF_PAUSE
 };
 
 // Load configuration from a file or set default values
@@ -118,6 +119,10 @@ void load_config(char *config_file_path) {
         else if (strcmp(key, "max_n_requests") == 0) {
             iv = atoi(val);
             if (iv > 0) g_config.max_n_requests = iv;
+        }
+        else if (strcmp(key, "nof_pause") == 0) {
+            iv = atoi(val);
+            if (iv > 0) g_config.nof_pause = iv;
         }
         // unrecognized keys are ignored
     }

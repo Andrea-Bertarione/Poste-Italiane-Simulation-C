@@ -151,14 +151,22 @@ void start_new_day(int day,
     shared_stats->today = (daily_stats){0};
     sem_post(&shared_stats->stats_lock);
 
+    printf(DIRETTORE_PREFIX " === Available Worker Seats ===\n");
+    fflush(stdout);
+
     sem_wait(&shared_stations->stations_lock);
     for (int i = 0; i < g_config.num_worker_seats; i++) {
         shared_stations->NOF_WORKER_SEATS[i].operator_process = 0;
         shared_stations->NOF_WORKER_SEATS[i].operator_status  = FREE;
         shared_stations->NOF_WORKER_SEATS[i].user_status      = FREE;
         shared_stations->NOF_WORKER_SEATS[i].service_id       = rand() % NUM_SERVICE_TYPES;
+
+        printf(DIRETTORE_PREFIX " Worker seat %d: service=%s\n", i, services[shared_stations->NOF_WORKER_SEATS[i].service_id]);
     }
     sem_post(&shared_stations->stations_lock);
+
+    printf("\n" DIRETTORE_PREFIX " ========================\n");
+    fflush(stdout);
 
     for (int i = 0; i < g_config.num_users + g_config.num_operators; i++) {
         sem_post(&shared_stats->day_update_event);
@@ -182,6 +190,8 @@ int main(const int argc, const char *argv[]) {
 
     int minutes_elapsed = 0;
     int days_elapsed    = 0;
+
+    srand(getpid() * time(NULL));
 
     shared_stats = init_shared_memory(SHM_STATS_NAME,
                                          SHM_STATS_SIZE,

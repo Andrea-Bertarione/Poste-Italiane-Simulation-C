@@ -111,10 +111,22 @@ int generate_service_list(int list[MAX_N_REQUESTS_COMPILE]) {
 }
 
 int generate_walk_in_time(int num_requests) {
-    unsigned int max = (g_config.worker_shift_close - (0.4 * num_requests)) - g_config.worker_shift_open;
-    int hour = (rand() % max) + g_config.worker_shift_open;
-    return (hour * 60) + (rand() % 60) + 1;
+    int shift_start = g_config.worker_shift_open * 60;     // in minutes
+    int shift_end   = g_config.worker_shift_close * 60;    // in minutes
+
+    // Reserve 5 minutes per request on average, or some fixed margin
+    int margin = (int)(5.0 * num_requests);  
+
+    int max_time = shift_end - margin - shift_start;
+    
+    if (max_time < 1) {
+        max_time = 1;  // fallback to earliest possible time
+    }
+    
+    int walk_in = shift_start + (rand() % max_time) + 1;
+    return walk_in;
 }
+
 
 void update_fails_stats(poste_stats *shared_stats, int service_id) {
     sem_wait(&shared_stats->stats_lock);
@@ -282,7 +294,7 @@ void day_loop(poste_stats *shared_stats, poste_stations *shared_stations, mq_id 
     int n_services = generate_service_list(service_list);
     int walk_in_time = generate_walk_in_time(n_services);
 
-    printf(PREFIX " Generated service list with %d services, walk-in time at %d minutes\n", getpid(), n_services, walk_in_time);
+    printf(PREFIX " Generated service list with %d services, walk-in time at %02d:%02d\n", getpid(), n_services, walk_in_time / 60, walk_in_time % 60);
     fflush(stdout);
 
     // Wait for the poste to open
