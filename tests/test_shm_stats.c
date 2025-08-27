@@ -6,7 +6,10 @@
 #include <stdlib.h>     // for exit
 #include <semaphore.h>
 #include <errno.h>
-#include "direttore.h"  // init/cleanup declarations, poste_stats, SHM_* constants
+#include <poste.h>
+#include <direttore.h>  
+
+typedef struct S_poste_stats poste_stats;
 
 int main(void) {
     const char *name = SHM_STATS_NAME;

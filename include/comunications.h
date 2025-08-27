@@ -5,6 +5,7 @@
 #include <msg_queue.h>
 
 #define KEY_TICKET_MSG "./msg/ticket"
+#define KEY_NEW_USERS "./msg/new_users"
 #define PROJ_ID  'P'
 
 enum MESSAGE_TYPES {
@@ -15,6 +16,7 @@ enum MESSAGE_TYPES {
 };
 
 #define MSG_TYPE_TICKET_REQUEST_MULT * 10000
+#define MSG_TYPE_ADD_USERS_REQUEST 10
 
 struct S_ticket_request {
     pid_t sender_pid;
@@ -35,7 +37,17 @@ struct S_service_done {
     pid_t sender_pid;
     int ticket_number;
     int service_id;
-    double service_time; // in seconds
+    double service_time; 
+};
+
+struct S_new_users_request {
+    pid_t sender_pid;
+    int N_NEW_USERS;
+};
+
+struct S_new_users_done {
+    int status; // 0 -> error - 1 -> success
+    char *message; // Success message, Error message
 };
 
 #endif

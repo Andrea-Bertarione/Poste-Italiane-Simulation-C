@@ -4,7 +4,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <semaphore.h>
-#include "direttore.h"  // declares day_to_minutes, start_new_day, poste_stats
+#include <poste.h>
+#include <direttore.h>  
+
+typedef struct S_poste_stats poste_stats;
+typedef struct S_poste_stations   poste_stations;
 
 int main(void) {
     printf("\n[TEST] Starting time conversion and start_new_day tests...\n");
@@ -28,6 +32,7 @@ int main(void) {
     // ---- Test start_new_day ----
     printf("[STEP] Testing start_new_day() update...\n");
     poste_stats stats = {0};
+    poste_stations stations = {0};
 
     printf("       Initializing semaphore inside poste_stats struct...\n");
     if (sem_init(&stats.stats_lock, 0, 1) != 0) {
@@ -36,7 +41,7 @@ int main(void) {
     }
 
     printf("       Calling start_new_day(3)...\n");
-    start_new_day(3, &stats);
+    start_new_day(3, &stats, &stations);
 
     printf("       Verifying current_day value...\n");
     assert(stats.current_day == 3);

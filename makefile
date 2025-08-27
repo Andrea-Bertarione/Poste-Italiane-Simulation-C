@@ -15,9 +15,10 @@ SRCS := $(SRC)/direttore.c \
         $(SRC)/erogatore_ticket.c \
         $(SRC)/operatore.c \
         $(SRC)/utente.c \
+		$(SRC)/new_users.c \
         $(SYS)/msg_queue.c \
         $(SYS)/shared_mem.c \
-		$(SYS)/config.c
+		$(SYS)/config.c 
 
 # Object files for shared/system modules only
 SYSTEM_OBJS := $(OBJ)/systems/msg_queue.o $(OBJ)/systems/shared_mem.o $(OBJ)/systems/config.o
@@ -27,13 +28,15 @@ ALL_OBJS := $(OBJ)/direttore.o \
             $(OBJ)/erogatore_ticket.o \
             $(OBJ)/operatore.o \
             $(OBJ)/utente.o \
+			$(OBJ)/new_users.o \
             $(SYSTEM_OBJS)
 
 # Executables
 EXES := $(BIN)/direttore \
         $(BIN)/erogatore_ticket \
         $(BIN)/operatore \
-        $(BIN)/utente
+        $(BIN)/utente \
+		$(BIN)/new_users.o
 
 .PHONY: all clean unit test
 
@@ -50,6 +53,9 @@ $(BIN)/operatore: $(OBJ)/operatore.o $(SYSTEM_OBJS) | $(BIN)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 $(BIN)/utente: $(OBJ)/utente.o $(SYSTEM_OBJS) | $(BIN)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+$(BIN)/new_users: $(OBJ)/new_users.o $(SYSTEM_OBJS) | $(BIN)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 # Compile sources to objects with order-only directory dependencies
