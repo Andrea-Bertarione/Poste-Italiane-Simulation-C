@@ -9,10 +9,12 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <errno.h>
 
-#include "direttore.h"
-#include "poste.h"
-#include "shared_mem.h"
+#include <direttore.h>
+#include <poste.h>
+#include <shared_mem.h>
+#include <comunications.h>
 
 #define DIRETTORE_PREFIX "\033[31m[DIRETTORE]:\033[0m"
 
@@ -28,6 +30,8 @@ typedef struct S_daily_stats      daily_stats;
 typedef struct S_service_stats    service_stats;
 typedef struct S_poste_stations   poste_stations;
 typedef struct S_worker_seat      worker_seat;
+typedef struct S_new_users_request new_users_request;
+typedef struct S_new_users_done new_users_done;
 
 typedef enum PROCESS_INDEXES {
     TICKET,
@@ -173,6 +177,41 @@ void start_new_day(int day,
     }
 }
 
+// Function that handles the new_users message queue and add new users
+void check_new_users_queue(mq_id qid, pid_t *children, int *idx) {
+    new_users_request req;
+    ssize_t n = mq_receive(qid, MSG_TYPE_ADD_USERS_REQUEST, &req, sizeof(req), IPC_NOWAIT);
+    if (n >= 0) {
+        // Found message
+        g_config.num_users += req.N_NEW_USERS;
+
+        children = realloc(children, sizeof(int) * (1 + g_config.num_operators + g_config.num_users));
+
+        for (int i = 0; i < req.N_NEW_USERS; i++) {
+            children[(*idx)++] = start_process(UTENTE);
+        }
+
+        new_users_done res;
+        res.status = 1;
+
+        if (mq_send(qid, req.sender_pid, &res, sizeof(res)) < 0) {
+            perror("mq_send response");
+        }
+    }
+    else if (n < 0 && errno != ENOMSG) {
+        // Error (ENOMSG means that no message was found)
+        perror("mqreceive new_users");
+        //printf("code: %d \n", errno);
+
+        new_users_done res;
+        res.status = 0;
+
+        if (mq_send(qid, req.sender_pid, &res, sizeof(res)) < 0) {
+            perror("mq_send response");
+        }
+    }
+}
+
 #ifndef UNIT_TEST
 int main(const int argc, const char *argv[]) {
     char *config_file = NULL;
@@ -184,6 +223,16 @@ int main(const int argc, const char *argv[]) {
 
     int open_shm[2];
     int open_shm_index = 0;
+
+    key_t key_ticket = ftok(KEY_TICKET_MSG, PROJ_ID);
+    if (key_ticket == -1) { perror("ftok"); return 1; }
+    mq_id qid_ticket = mq_open(key_ticket, IPC_CREAT, 0666);
+
+    key_t key = ftok(KEY_TICKET_MSG, proj_ID_USERS);
+    if (key == -1) { perror("ftok"); return 1; }
+    mq_id qid = mq_open(key, IPC_CREAT, 0666);
+
+    printf(DIRETTORE_PREFIX "Add_Users message queue running on queue %d \n", qid);
 
     poste_stats    *shared_stats;
     poste_stations *shared_stations;
@@ -221,7 +270,7 @@ int main(const int argc, const char *argv[]) {
         sem_post(&shared_stats->stats_lock);
     }
     
-    pid_t children[1 + g_config.num_operators + g_config.num_users];
+    pid_t *children = malloc(sizeof(int) * (1 + g_config.num_operators + g_config.num_users));
     int idx = 0;
 
     struct timespec t1 = { .tv_sec = 0, .tv_nsec = g_config.minute_duration };
@@ -267,6 +316,8 @@ int main(const int argc, const char *argv[]) {
             minutes_elapsed = 0;
         }
 
+        check_new_users_queue(qid, children, &idx);
+
         minutes_elapsed++;
         sem_wait(&shared_stats->stats_lock);
         shared_stats->current_minute = minutes_elapsed;
@@ -284,6 +335,10 @@ int main(const int argc, const char *argv[]) {
     print_final_stats(shared_stats);
 
     sleep(1);
+
+    mq_close(qid);
+    mq_close(qid_ticket);
+
     sem_destroy(&shared_stats->stats_lock);
     sem_destroy(&shared_stations->stations_lock);
     cleanup_shared_memory(SHM_STATS_NAME,

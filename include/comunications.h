@@ -7,6 +7,7 @@
 #define KEY_TICKET_MSG "./msg/ticket"
 #define KEY_NEW_USERS "./msg/new_users"
 #define PROJ_ID  'P'
+#define proj_ID_USERS 'Z'
 
 enum MESSAGE_TYPES {
     MSG_TYPE_TICKET_REQUEST = 1,
@@ -47,7 +48,6 @@ struct S_new_users_request {
 
 struct S_new_users_done {
     int status; // 0 -> error - 1 -> success
-    char *message; // Success message, Error message
 };
 
 #endif

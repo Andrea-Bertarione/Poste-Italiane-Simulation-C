@@ -8,7 +8,7 @@ SRC       := src
 SYS       := $(SRC)/systems
 INCLUDE   := include
 OBJ       := obj
-BIN       := bin
+BIN       := ./bin
 
 # Source files
 SRCS := $(SRC)/direttore.c \
@@ -36,7 +36,7 @@ EXES := $(BIN)/direttore \
         $(BIN)/erogatore_ticket \
         $(BIN)/operatore \
         $(BIN)/utente \
-		$(BIN)/new_users.o
+		$(BIN)/new_users
 
 .PHONY: all clean unit test
 
@@ -100,3 +100,9 @@ run_timeout: clean
 	make all
 	clear
 	$(BIN)/direttore --config ./configs/config_timeout.conf
+
+add_users: 
+	$(BIN)/new_users --n-new-users $(N)
+
+.PHONY: add_users
+#usage: make add_users N=5

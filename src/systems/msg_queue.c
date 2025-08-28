@@ -4,7 +4,7 @@
 
 
 mq_id mq_open(key_t key, int flags, int perms) {
-    return msgget(key, flags | IPC_CREAT | perms);
+    return msgget(key, flags | perms);
 }
 
 int mq_send(mq_id msqid, long mtype, const void *data, size_t length) {

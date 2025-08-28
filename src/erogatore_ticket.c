@@ -21,25 +21,14 @@ typedef struct S_ticket_response ticket_response;
 
 #ifndef UNIT_TEST
 int main() {
-    int open_shm[1] = {};
-    int open_shm_index = 0;
-
     bool running = true;
 
     key_t key = ftok(KEY_TICKET_MSG, PROJ_ID);
     if (key == -1) { perror("ftok"); return 1; }
-    mq_id qid = mq_open(key, 0, 0666);
-
-    ticket_queue *shared_ticket = (ticket_queue*) init_shared_memory(SHM_TICKET_NAME, SHM_TICKETS_SIZE, open_shm, &open_shm_index);
-    memset(shared_ticket, 0, SHM_TICKETS_SIZE);
-
-    int sem_ticket_result = sem_init(&shared_ticket->ticket_lock, 1, 1);
-    if (sem_ticket_result < 0) {
-        perror("sem_init");
-        exit(EXIT_FAILURE);
-    }
-
+    mq_id qid = mq_open(key, 0666, 0666);
     srand(time(NULL));
+
+    int ticket_counter = 0;
 
     printf("\e[1;33m[EROGATORE TICKET]:\033[0m Ticket generator running on queue %d\n", qid);
     while(running) {
@@ -52,44 +41,17 @@ int main() {
         }
 
         printf("\e[1;33m[EROGATORE TICKET]:\033[0m Received request from PID %d for service %s\n", req.sender_pid, services[req.service_id]);
-
-        //Create new ticket lock from start
-        // THIS IS IMPLEMENTATION IS BAREBONES
-        // if it needed to scale i would use a Hash map instead of a randomly indexed list
-        sem_wait(&shared_ticket->ticket_lock);
-
-        ticket new_ticket;
-        new_ticket.service = req.service_id;
-        new_ticket.ticket_number = shared_ticket->ticket_counter;
-        new_ticket.user = req.sender_pid;
-        new_ticket.in_use = 1;
-
-        int ticket_index = rand() % QUEUE_SIZE;
-        while (shared_ticket->tickets_queue[ticket_index].in_use) {
-            //refresh index
-
-            ticket_index = rand() % QUEUE_SIZE;
-        }
-
-        shared_ticket->tickets_queue[ticket_index] = new_ticket;
-
-        shared_ticket->ticket_counter++;
-
-        sem_post(&shared_ticket->ticket_lock);
         
         ticket_response resp;
         resp.generator_pid  = getpid();
-        resp.ticket_number  = new_ticket.ticket_number;
+        resp.ticket_number  = ticket_counter;
 
         if (mq_send(qid, req.sender_pid, &resp, sizeof(resp)) < 0) {
             perror("mq_send response");
         }
         
+        ticket_counter++;
     }
-
-
-    cleanup_shared_memory(SHM_TICKET_NAME, SHM_TICKETS_SIZE, open_shm[0], shared_ticket);
-    mq_close(qid);
 
     return 0;
 }
