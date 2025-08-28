@@ -10,7 +10,7 @@ mq_id mq_open(key_t key, int flags, int perms) {
 int mq_send(mq_id msqid, long mtype, const void *data, size_t length) {
     struct {
         long mtype;
-        char mtext[length];
+        char mtext[4096];
     } msg;
     msg.mtype = mtype;
     memcpy(msg.mtext, data, length);
@@ -20,7 +20,7 @@ int mq_send(mq_id msqid, long mtype, const void *data, size_t length) {
 ssize_t mq_receive(mq_id msqid, long mtype, void *buffer, size_t length, int flags) {
     struct {
         long mtype;
-        char mtext[length];
+        char mtext[4096];
     } msg;
     ssize_t ret = msgrcv(msqid, &msg, length, mtype, flags);
     if (ret >= 0) {
