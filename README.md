@@ -88,8 +88,6 @@ Director Process
 - **GCC compiler** with C99 support  
 - **POSIX-compatible system** (Linux/Unix)  
 - **Make utility**  
-- **pthread library** (usually pre-installed)  
-- **realtime extensions** (`-lrt` flag support)  
 - **System V IPC** support (`ipcrm`, `ipcs`)  
 
 ### Compilation Flags
