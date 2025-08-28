@@ -1,7 +1,7 @@
 # Simple Makefile for Poste Italiane Project
 
 CC       := gcc
-CFLAGS   := -Wall -Wextra -Werror -g -std=c99
+CFLAGS   := -Wvla -Wall -Wextra -Werror -g -std=c99
 LDFLAGS  := -lpthread -lrt
 
 SRC       := src
