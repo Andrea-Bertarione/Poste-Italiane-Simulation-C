@@ -1,7 +1,7 @@
 # Poste Italiane Simulation – C Implementation
 
-A multi-process simulation of an Italian post office built in C using POSIX IPC (shared memory, semaphores, System V message queues). Supports dynamic user addition, real-time scaling, comprehensive statistics (including CSV export), unit tests, and Docker.
-The choice of using english as for the documentation is given by person choice, if you find any issues let me know.
+> A multi-process simulation of an Italian post office built in C using POSIX IPC (shared memory, semaphores, System V message queues). Supports dynamic user addition, real-time scaling, comprehensive statistics (including CSV export), unit tests, and Docker.
+> The choice of using english as for the documentation is given by person choice, if you find any issues let me know.
 ---
 
 ## Features
