@@ -169,7 +169,7 @@ void busy_wait_until_walk_in(int walk_in_time, poste_stats *shared_stats) {
 }
 
 // Function that handles users that remains late
-void handle_late_users(poste_stats *shared_stats) {
+void handle_late_users(poste_stats *shared_stats, int service_id) {
     sem_wait(&shared_stats->stats_lock);
 
     if (been_late_today) {
@@ -181,6 +181,8 @@ void handle_late_users(poste_stats *shared_stats) {
     }
 
     shared_stats->today.late_users++;
+    shared_stats->simulation_global.late_users++;
+    shared_stats->simulation_services[service_id].late_users++;
     sem_post(&shared_stats->stats_lock);
     printf(PREFIX " Late user, incrementing late users count\n", getpid());
     fflush(stdout);
@@ -261,7 +263,7 @@ void handle_service(int service_id, mq_id qid, poste_stats *stats, poste_station
             printf(PREFIX " Shift ended while waiting for a seat, they made me late, add a explode counter\n", getpid());
             fflush(stdout);
 
-            handle_late_users(stats);
+            handle_late_users(stats, service_id);
             update_fails_stats(stats, service_id);
 
             return;
@@ -296,7 +298,7 @@ void handle_service(int service_id, mq_id qid, poste_stats *stats, poste_station
         printf(PREFIX " Shift ended while waiting for a ticket to finish, they made me late, add a explode counter\n", getpid());
         fflush(stdout);
 
-        handle_late_users(stats);
+        handle_late_users(stats, service_id);
 
         return;
     }
@@ -327,7 +329,7 @@ void day_loop(poste_stats *shared_stats, poste_stations *shared_stations, mq_id 
             printf(PREFIX " Shift ended while waiting for a seat, going home\n", getpid());
             fflush(stdout);
 
-            handle_late_users(shared_stats);
+            handle_late_users(shared_stats, service_list[i]);
             update_fails_stats(shared_stats, service_list[i]);
 
             return;

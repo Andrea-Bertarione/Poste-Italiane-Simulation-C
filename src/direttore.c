@@ -100,6 +100,10 @@ void print_day_stats(daily_stats today) {
             printf("  Avg general wait time: N/A\n");
             printf("  Avg service wait time: N/A\n");
         }
+        printf("  Late users: %d\n", today.services[i].late_users);
+
+        printf("  Ratio between worker seats and working operators: %.2f\n",
+               g_config.num_worker_seats > 0 ? (float)today.active_operators / g_config.num_worker_seats : 0.0f);
     }
     printf("\n" DIRETTORE_PREFIX " ========================\n");
 }
@@ -121,6 +125,8 @@ void print_final_stats(poste_stats *shared_stats) {
     PRINT_FLOAT_STAT("Avg service wait time",
                      shared_stats->simulation_global.total_service_time,
                      shared_stats->simulation_global.total_requests);
+
+    PRINT_STAT("Total late users",            shared_stats->simulation_global.late_users);
 
     printf("\n" DIRETTORE_PREFIX " === Global Service Statistics ===\n");
     for (int i = 0; i < NUM_SERVICE_TYPES; i++) {
@@ -212,6 +218,98 @@ void check_new_users_queue(mq_id qid, pid_t *children, int *idx) {
     }
 }
 
+// Function that write stats to a CSV file
+// ...existing code...
+void write_stats(poste_stats *shared_stats) {
+    char filename[MAX_PATH_LENGTH + 32];
+    int counter = 0;
+    FILE *fp = NULL;
+
+    // Ensure folder exists
+    struct stat st = {0};
+    if (stat(CSV_FILE_PATH, &st) == -1) {
+        if (mkdir(CSV_FILE_PATH, 0755) == -1) {
+            perror("mkdir for CSV_FILE_PATH");
+            return;
+        }
+    }
+
+    do {
+        if (counter == 0)
+            snprintf(filename, sizeof(filename), "%sfinal_stats.csv", CSV_FILE_PATH);
+        else
+            snprintf(filename, sizeof(filename), "%sfinal_stats_%d.csv", CSV_FILE_PATH, counter);
+
+        fp = fopen(filename, "r");
+        if (fp) {
+            fclose(fp);
+            counter++;
+        }
+    } while (fp != NULL);
+
+    fp = fopen(filename, "w");
+    if (!fp) {
+        perror("fopen for stats CSV");
+        return;
+    }
+
+    // --- Write simulation summary ---
+    // Determine exit mode
+    const char *exit_mode = (shared_stats->today.late_users > g_config.explode_max) ? "explode" : "timeout";
+    fprintf(fp, "Simulation Summary\n");
+    fprintf(fp, "ExitMode,%s\n", exit_mode);
+    fprintf(fp, "ConfigFile,%s\n", shared_stats->configuration_file);
+    fprintf(fp, "SimDuration(days),%d\n", g_config.sim_duration);
+    fprintf(fp, "MinuteDuration(ns),%ld\n", g_config.minute_duration);
+    fprintf(fp, "NumOperators,%d\n", g_config.num_operators);
+    fprintf(fp, "NumUsers,%d\n", g_config.num_users);
+    fprintf(fp, "NumWorkerSeats,%d\n", g_config.num_worker_seats);
+    fprintf(fp, "WorkerShiftOpen(hour),%d\n", g_config.worker_shift_open);
+    fprintf(fp, "WorkerShiftClose(hour),%d\n", g_config.worker_shift_close);
+    fprintf(fp, "ExplodeMaxLateUsers,%d\n", g_config.explode_max);
+    fprintf(fp, "\n");
+
+    // --- Write global stats ---
+    fprintf(fp, "Day,Minute,TotalActiveOperators,TotalSimulationPauses,TotalServedUsers,TotalFailedServices,AvgGeneralWaitTime,AvgServiceWaitTime\n");
+    fprintf(fp, "%d,%d,%d,%d,%d,%d,%.2f,%.2f\n",
+        shared_stats->current_day,
+        shared_stats->current_minute,
+        shared_stats->total_active_operators,
+        shared_stats->total_simulation_pauses,
+        shared_stats->simulation_global.served_users,
+        shared_stats->simulation_global.failed_services,
+        shared_stats->simulation_global.total_requests > 0 ?
+            (float)shared_stats->simulation_global.total_wait_time / shared_stats->simulation_global.total_requests : 0.0f,
+        shared_stats->simulation_global.total_requests > 0 ?
+            (float)shared_stats->simulation_global.total_service_time / shared_stats->simulation_global.total_requests : 0.0f
+    );
+
+    // --- Write per-service stats ---
+    fprintf(fp, "\nService,ServedUsers,FailedServices,AvgGeneralWaitTime,AvgServiceWaitTime\n");
+    for (int i = 0; i < NUM_SERVICE_TYPES; i++) {
+        fprintf(fp, "%s,%d,%d,%.2f,%.2f\n",
+            services[i],
+            shared_stats->simulation_services[i].served_users,
+            shared_stats->simulation_services[i].failed_services,
+            shared_stats->simulation_services[i].total_requests > 0 ?
+                (float)shared_stats->simulation_services[i].total_wait_time / shared_stats->simulation_services[i].total_requests : 0.0f,
+            shared_stats->simulation_services[i].total_requests > 0 ?
+                (float)shared_stats->simulation_services[i].total_service_time / shared_stats->simulation_services[i].total_requests : 0.0f
+        );
+    }
+
+    // --- Write extra info ---
+    fprintf(fp, "\nExtraInfo\n");
+    fprintf(fp, "LateUsersToday,%d\n", shared_stats->today.late_users);
+    fprintf(fp, "TotalLateUsers,%d\n", shared_stats->simulation_global.late_users);
+    fprintf(fp, "TotalRequests,%d\n", shared_stats->simulation_global.total_requests);
+    fprintf(fp, "TotalWaitTime,%.2f\n", (float)shared_stats->simulation_global.total_wait_time);
+    fprintf(fp, "TotalServiceTime,%.2f\n", (float)shared_stats->simulation_global.total_service_time);
+
+    fclose(fp);
+    printf(DIRETTORE_PREFIX " Statistics written to %s\n", filename);
+}
+
 #ifndef UNIT_TEST
 int main(const int argc, const char *argv[]) {
     char *config_file = NULL;
@@ -228,9 +326,13 @@ int main(const int argc, const char *argv[]) {
     if (key_ticket == -1) { perror("ftok"); return 1; }
     mq_id qid_ticket = mq_open(key_ticket, IPC_CREAT, 0666);
 
-    key_t key = ftok(KEY_TICKET_MSG, proj_ID_USERS);
+    key_t key = ftok(KEY_NEW_USERS, proj_ID_USERS);
     if (key == -1) { perror("ftok"); return 1; }
     mq_id qid = mq_open(key, IPC_CREAT, 0666);
+    if (qid < 0) {
+        perror("mq_open");
+        return 1;
+    }
 
     printf(DIRETTORE_PREFIX "Add_Users message queue running on queue %d \n", qid);
 
@@ -333,6 +435,7 @@ int main(const int argc, const char *argv[]) {
     }
 
     print_final_stats(shared_stats);
+    write_stats(shared_stats);
 
     sleep(1);
 

@@ -25,7 +25,7 @@ int main() {
 
     key_t key = ftok(KEY_TICKET_MSG, PROJ_ID);
     if (key == -1) { perror("ftok"); return 1; }
-    mq_id qid = mq_open(key, 0666, 0666);
+    mq_id qid = mq_open(key, 0, 0666);
     srand(time(NULL));
 
     int ticket_counter = 0;

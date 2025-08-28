@@ -1,11 +1,12 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <stdio.h>
-#include <comunications.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
+
+#include <comunications.h>
 
 #define PREFIX "\e[1;36m[N-NEW-USERS]:\e[0m"
 
@@ -30,7 +31,10 @@ int main(const int argc, const char *argv[]) {
 
     key_t key = ftok(KEY_NEW_USERS, proj_ID_USERS);
     if (key == -1) { perror("ftok"); return 1; }
-    mq_id qid = mq_open(key, 0666, 0666);
+
+    //printf("ftok key: %d\n", key);
+
+    mq_id qid = mq_open(key, 0, 0666);
     if (qid < 0) {
         perror("mq_open");
         return 1;

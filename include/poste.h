@@ -20,6 +20,7 @@ struct S_service_stats {
     double total_wait_time;      // For calculating averages
     double total_service_time;   // For calculating averages
     int total_requests;          // To calculate averages properly
+    int late_users;              // To count late users
 };
 
 struct S_daily_stats {

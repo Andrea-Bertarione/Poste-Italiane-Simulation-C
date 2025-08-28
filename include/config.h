@@ -15,6 +15,8 @@
 #define MAX_N_REQUESTS_COMPILE 50 // Maximum number of requests a user can make in a day for compile time
 #define MAX_WORKER_SEATS 30 // Maximum number of worker seats
 
+#define CSV_FILE_PATH "./tmp/"
+
 struct poste_config {
     int num_operators; // Number of operators in the simulation
     int num_users; // Number of users in the simulation
